@@ -1,0 +1,87 @@
+#!/usr/bin/bash
+# tools/gadget-build — Renesas gadget snap builder
+#
+# ┌───────────────────────────────────────────────────────────────────────┐
+# │ OUT OF CONTRACT SCOPE (intentional, per project decision)               │
+# │                                                                         │
+# │ SILICON_WORKSHOP_CONTRACT.md §17 lists gadget-snap generation as OUT OF │
+# │ SCOPE for the three-SDK Silicon Workshop. This command is deliberately  │
+# │ kept OUTSIDE the three SDKs (in tools/, not sdk/) so the SDK boundary    │
+# │ stays contract-clean. It is provided as a convenience only and should   │
+# │ be raised with the project owners. See DESIGN.md § Contract deviations. │
+# └───────────────────────────────────────────────────────────────────────┘
+#
+# Clones canonical/renesas-bootassets and builds the gadget snap for the
+# configured board/base. Board and core base come from config/workshop.yaml
+# (silicon.soc, ubuntu.core_base). Private-repo access uses the forwarded
+# ssh-agent (connect the ssh-agent plug); no credentials in project config.
+#
+# Usage:
+#   gadget-build [clone|build|all]   (default: all)
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMMON_DIR="${SCRIPT_DIR}/../sdk/common"
+export WORKSHOP_LOG_TAG="gadget"
+# shellcheck source=/dev/null
+source "${COMMON_DIR}/workshop.sh"
+
+ACTION="${1:-all}"
+
+WORKSHOP_ROOT="$(workshop_find_root)"
+workshop_log "Workshop root: ${WORKSHOP_ROOT}"
+workshop_read_config "${WORKSHOP_ROOT}"
+workshop_validate_config
+workshop_resolve_toolchain
+
+BOARD="${CFG_SILICON_SOC}"                # rzt2h | rzn2h
+CORE_BASE="${CFG_UBUNTU_CORE_BASE:-core24}"
+REPO="git@github.com:canonical/renesas-bootassets.git"
+BRANCH="${GADGET_BRANCH:-main}"
+SRC="${WORKSHOP_ROOT}/gadget-src"
+GADGET_DIR="${SRC}/bootassets/${BOARD}/${CORE_BASE}"
+
+gadget_clone() {
+    if [[ -d "${SRC}/.git" ]]; then
+        workshop_log "gadget-src/ already cloned (rm -rf gadget-src to re-clone)"
+    else
+        workshop_log "Cloning ${REPO} (branch: ${BRANCH}, depth 1)..."
+        git clone --depth 1 --branch "${BRANCH}" "${REPO}" "${SRC}" \
+            || workshop_fail "gadget clone failed"
+    fi
+    if [[ ! -f "${GADGET_DIR}/snap/snapcraft.yaml" && ! -f "${GADGET_DIR}/snapcraft.yaml" ]]; then
+        workshop_warn "no snapcraft.yaml for ${BOARD} at ${GADGET_DIR#${WORKSHOP_ROOT}/}"
+    else
+        workshop_log "snapcraft.yaml found for ${BOARD} — ready to build."
+    fi
+}
+
+gadget_build() {
+    [[ -d "${GADGET_DIR}" ]] || workshop_fail "Board dir ${GADGET_DIR#${WORKSHOP_ROOT}/} not found (check silicon.soc / ubuntu.core_base)."
+    workshop_register_binfmt "${KERNEL_ARCH}"
+    workshop_log "Building gadget snap for ${BOARD} (${CORE_BASE}, ${KERNEL_ARCH})..."
+    (
+        cd "${GADGET_DIR}"
+        # KERNEL_PUBKEY_TOKEN forwarded so the pub-signing-key part can fetch it.
+        sudo --preserve-env=SSH_AUTH_SOCK,KERNEL_PUBKEY_TOKEN \
+            snapcraft pack --destructive-mode --build-for="${KERNEL_ARCH}" \
+            || workshop_fail "gadget snapcraft pack failed"
+    )
+    local out="${WORKSHOP_ROOT}/out/gadget"
+    mkdir -p "${out}"
+    local count=0 f
+    shopt -s nullglob
+    for f in "${GADGET_DIR}"/*.snap; do mv -f "${f}" "${out}/"; count=$((count+1)); done
+    shopt -u nullglob
+    [[ "${count}" -gt 0 ]] || workshop_fail "No gadget .snap produced."
+    workshop_log "Staged ${count} gadget snap(s) → out/gadget/"
+}
+
+case "${ACTION}" in
+    clone) gadget_clone ;;
+    build) gadget_build ;;
+    all)   gadget_clone; gadget_build ;;
+    --help|-h) echo "Usage: gadget-build [clone|build|all]"; exit 0 ;;
+    *) workshop_fail "Unknown action '${ACTION}' (clone|build|all)" ;;
+esac

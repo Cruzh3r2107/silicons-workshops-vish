@@ -1,0 +1,21 @@
+name: noble-build
+version: "0.1"
+title: Renesas Kernel Build Host SDK (Ubuntu 24.04 Noble)
+summary: Build-host provisioning for the Renesas Silicon Workshop on Ubuntu 24.04 (snapcraft stable)
+description: |
+  Provisions the Renesas build host on Ubuntu 24.04 Noble: snapcraft
+  (latest/stable), arm64 (Cortex-A55) and armhf (Cortex-R52) foreign
+  architectures and cross-toolchains, kernel/BSP build dependencies, and qemu
+  binfmt for the initrd part's foreign-arch chroot.
+
+  This is a build-host provisioning SDK (hooks only) — it is NOT one of the
+  three functional SDKs. The functional SDKs are kernel-sdk, deb-sdk and
+  snap-sdk. Pairs with .workshop/renesas-noble.yaml.
+license: GPL-2.0-only
+
+plugs:
+  ssh-agent:
+    interface: ssh-agent
+  build-cache:
+    interface: mount
+    workshop-target: /var/cache/kernel-build

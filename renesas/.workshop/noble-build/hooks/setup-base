@@ -1,0 +1,135 @@
+#!/bin/bash
+# Runs as root before the project is mounted.
+# Sets up the Renesas build host for Ubuntu 24.04 LTS (Noble Numbat):
+#   - snapcraft from latest/stable (9.x, supports core24 natively)
+#   - arm64 + armhf foreign architectures and apt cross-arch sources
+#   - cross-toolchains and kernel/BSP build dependencies
+set -euo pipefail
+
+# Install snapcraft. On a fresh noble container snapd may not have finished
+# seeding yet -- retry for up to 5 minutes.
+if ! command -v snapcraft &>/dev/null; then
+  echo "[renesas-noble-build] Installing snapcraft (latest/stable)..."
+  for i in $(seq 1 30); do
+    snap install snapcraft --classic && break
+    echo "[renesas-noble-build]   waiting for snapd to seed (attempt ${i}/30)..."
+    sleep 10
+  done
+else
+  echo "[renesas-noble-build] snapcraft already installed ($(snapcraft version))"
+fi
+
+# Add arm64 and armhf foreign architectures.
+for arch in arm64 armhf; do
+  if dpkg --print-foreign-architectures | grep -qx "${arch}"; then
+    echo "[renesas-noble-build] ${arch} already registered"
+  else
+    echo "[renesas-noble-build] Adding foreign architecture: ${arch}"
+    dpkg --add-architecture "${arch}"
+  fi
+done
+
+# Fix apt sources for cross-arch package fetching.
+# On noble (24.04), apt uses deb822 format (/etc/apt/sources.list.d/ubuntu.sources).
+# On older bases it uses the classic /etc/apt/sources.list.
+if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+  # deb822: restrict the existing archive entry to amd64, then append
+  # arm64/armhf entries pointing at ports.ubuntu.com.
+  if ! grep -q "Architectures: amd64" /etc/apt/sources.list.d/ubuntu.sources; then
+    echo "[renesas-noble-build] Restricting ubuntu.sources to amd64 and adding ports..."
+    sed -i '/^Types: deb$/a Architectures: amd64' \
+      /etc/apt/sources.list.d/ubuntu.sources
+    # Append arm64/armhf ports entries for all active suites.
+    suites=$(grep -E "^Suites:" /etc/apt/sources.list.d/ubuntu.sources | head -1 | sed 's/^Suites: //')
+    cat >>/etc/apt/sources.list.d/ubuntu.sources <<EOF
+
+Types: deb
+URIs: http://ports.ubuntu.com/ubuntu-ports
+Suites: ${suites}
+Components: main restricted universe multiverse
+Architectures: arm64 armhf
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+EOF
+  fi
+else
+  # Classic sources.list: add [arch=amd64] to existing amd64 entries and
+  # append ports entries for arm64/armhf.
+  if ! grep -q "arch=amd64" /etc/apt/sources.list; then
+    echo "[renesas-noble-build] Fixing sources.list for cross-arch..."
+    sed -i 's|deb http://archive.ubuntu.com|deb [arch=amd64] http://archive.ubuntu.com|g' \
+      /etc/apt/sources.list
+    sed -i 's|deb http://security.ubuntu.com|deb [arch=amd64] http://security.ubuntu.com|g' \
+      /etc/apt/sources.list
+    cat >>/etc/apt/sources.list <<'EOF'
+
+# arm64/armhf -- added by renesas-noble-build setup-base
+deb [arch=arm64,armhf] http://ports.ubuntu.com/ubuntu-ports noble main restricted universe multiverse
+deb [arch=arm64,armhf] http://ports.ubuntu.com/ubuntu-ports noble-updates main restricted universe multiverse
+deb [arch=arm64,armhf] http://ports.ubuntu.com/ubuntu-ports noble-security main restricted universe multiverse
+deb [arch=arm64,armhf] http://ports.ubuntu.com/ubuntu-ports noble-backports main restricted universe multiverse
+EOF
+  fi
+fi
+
+apt-get update
+
+echo "[renesas-noble-build] Installing build dependencies..."
+apt-get install -y \
+  build-essential fakeroot \
+  bc bison flex cpio rsync \
+  libssl-dev libelf-dev \
+  libdw-dev \
+  dwarves \
+  git devscripts equivs ubuntu-dev-tools \
+  gnupg \
+  crossbuild-essential-arm64 \
+  crossbuild-essential-armhf \
+  kernel-wedge \
+  debhelper dkms \
+  python3-debian \
+  \
+  `# gadget snap: ARM Trusted Firmware + FIP tools` \
+  arm-trusted-firmware-tools \
+  srecord \
+  uuid-dev uuid-dev:arm64 \
+  \
+  `# gadget snap: U-Boot / OP-TEE build chain` \
+  device-tree-compiler \
+  libgnutls28-dev \
+  libxml2-dev \
+  libssl-dev \
+  pkgconf \
+  pkg-config \
+  wget \
+  zlib1g-dev \
+  \
+  `# gadget snap: Python crypto / ELF utilities for OP-TEE` \
+  python3-cryptography \
+  python3-pyelftools \
+  python3-pycryptodome \
+  \
+  `# kernel deb: Rust module bindings, docs, and health-check tools` \
+  `# noble 6.8 pins bindgen-0.65 (BINDGEN=bindgen-0.65); rustavailable needs libclang (clang-18); dwarfdump builds debian/rules sources.list` \
+  bindgen-0.65 \
+  clang-18 \
+  libclang-18-dev \
+  dwarfdump \
+  rustfmt \
+  rustc \
+  rust-src \
+  cargo \
+  xmlto \
+  \
+  `# initrd part: arm64 chroot via qemu user-mode + binfmt registration` \
+  qemu-user \
+  qemu-user-binfmt
+
+# The initrd part builds a foreign-arch chroot and runs binaries inside it via
+# qemu user-mode emulation, which needs the binfmt_misc handler registered.
+echo "[renesas-noble-build] Registering qemu binfmt handlers..."
+if [ ! -e /proc/sys/fs/binfmt_misc/register ]; then
+  mount -t binfmt_misc binfmt_misc /proc/sys/fs/binfmt_misc 2>/dev/null || true
+fi
+/usr/lib/systemd/systemd-binfmt 2>/dev/null || systemctl restart systemd-binfmt 2>/dev/null || true
+
+echo "[renesas-noble-build] setup-base complete."

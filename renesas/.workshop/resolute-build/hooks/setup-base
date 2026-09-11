@@ -1,0 +1,168 @@
+#!/bin/bash
+# Runs as root before the project is mounted.
+# Sets up the Renesas build host for Ubuntu 26.04 LTS (Resolute Raccoon):
+#   - snapcraft from latest/edge
+#   - arm64 + armhf foreign architectures and apt cross-arch sources
+#   - cross-toolchains and kernel/BSP build dependencies
+set -euo pipefail
+
+# Install snapcraft. On a fresh resolute container snapd may not have finished
+# seeding yet -- retry for up to 5 minutes.
+if ! command -v snapcraft &>/dev/null; then
+  echo "[renesas-resolute-build] Installing snapcraft (latest/edge)..."
+  for i in $(seq 1 30); do
+    snap install snapcraft --classic --channel=latest/edge && break
+    echo "[renesas-resolute-build]   waiting for snapd to seed (attempt ${i}/30)..."
+    sleep 10
+  done
+else
+  echo "[renesas-resolute-build] snapcraft already installed ($(snapcraft version))"
+fi
+
+# Add arm64 and armhf foreign architectures.
+for arch in arm64 armhf; do
+  if dpkg --print-foreign-architectures | grep -qx "${arch}"; then
+    echo "[renesas-resolute-build] ${arch} already registered"
+  else
+    echo "[renesas-resolute-build] Adding foreign architecture: ${arch}"
+    dpkg --add-architecture "${arch}"
+  fi
+done
+
+# Fix apt sources for cross-arch package fetching.
+# On resolute (26.04), apt uses deb822 format (/etc/apt/sources.list.d/ubuntu.sources).
+# amd64/i386 are served by archive.ubuntu.com; arm64/armhf only exist on
+# ports.ubuntu.com. We must therefore (a) restrict the archive.ubuntu.com /
+# security.ubuntu.com stanzas to amd64 (otherwise apt looks for binary-armhf on
+# archive and gets 404), and (b) point a ports stanza at arm64/armhf.
+# We also remove any snapcraft-created duplicate ports file to avoid apt errors.
+if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+  echo "[renesas-resolute-build] Rewriting ubuntu.sources for cross-arch (amd64 on archive, arm64/armhf on ports)..."
+  python3 - <<'PYEOF'
+import re
+path = "/etc/apt/sources.list.d/ubuntu.sources"
+with open(path) as f:
+    content = f.read()
+
+stanzas = [s for s in re.split(r"\n\s*\n", content.strip()) if s.strip()]
+result = []
+have_ports = False
+for stanza in stanzas:
+    # Only touch real deb822 stanzas (those with a Types: field). Leave
+    # comment-only blocks untouched to avoid malformed-stanza errors.
+    if not re.search(r"^Types:", stanza, flags=re.M):
+        result.append(stanza)
+        continue
+    if "ports.ubuntu.com" in stanza:
+        have_ports = True
+        arch = "arm64 armhf"
+    else:
+        arch = "amd64"
+    if re.search(r"^Architectures:", stanza, flags=re.M):
+        stanza = re.sub(r"^Architectures:.*$", f"Architectures: {arch}", stanza, flags=re.M)
+    else:
+        stanza = stanza.rstrip() + f"\nArchitectures: {arch}"
+    result.append(stanza)
+
+if not have_ports:
+    suites = "resolute resolute-updates resolute-backports"
+    m = re.search(r"^Suites:\s*(.+)$", content, flags=re.M)
+    if m:
+        suites = m.group(1).strip()
+    result.append(
+        "Types: deb\n"
+        "URIs: http://ports.ubuntu.com/ubuntu-ports\n"
+        f"Suites: {suites}\n"
+        "Components: main restricted universe multiverse\n"
+        "Architectures: arm64 armhf\n"
+        "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg"
+    )
+
+with open(path, "w") as f:
+    f.write("\n\n".join(result) + "\n")
+PYEOF
+  # Remove any snapcraft-managed duplicate ports file to prevent apt warnings/errors.
+  rm -f /etc/apt/sources.list.d/craft-http_ports_ubuntu_com_ubuntu_ports.sources
+else
+  # Classic sources.list fallback (older bases).
+  if ! grep -q "arch=amd64" /etc/apt/sources.list; then
+    echo "[renesas-resolute-build] Fixing sources.list for cross-arch..."
+    sed -i 's|deb http://archive.ubuntu.com|deb [arch=amd64] http://archive.ubuntu.com|g' \
+      /etc/apt/sources.list
+    sed -i 's|deb http://security.ubuntu.com|deb [arch=amd64] http://security.ubuntu.com|g' \
+      /etc/apt/sources.list
+    cat >>/etc/apt/sources.list <<'EOF'
+
+# arm64/armhf -- added by renesas-resolute-build setup-base
+deb [arch=arm64,armhf] http://ports.ubuntu.com/ubuntu-ports resolute main restricted universe multiverse
+EOF
+  fi
+fi
+
+apt-get update
+
+echo "[renesas-resolute-build] Installing build dependencies..."
+apt-get install -y \
+  build-essential fakeroot \
+  bc bison flex cpio rsync \
+  libssl-dev libelf-dev \
+  libdw-dev \
+  dwarves \
+  git devscripts equivs ubuntu-dev-tools \
+  gnupg \
+  crossbuild-essential-arm64 \
+  crossbuild-essential-armhf \
+  kernel-wedge \
+  debhelper dkms \
+  python3-debian \
+  \
+  `# gadget snap: ARM Trusted Firmware + FIP tools` \
+  arm-trusted-firmware-tools \
+  srecord \
+  uuid-dev uuid-dev:arm64 \
+  \
+  `# gadget snap: U-Boot / OP-TEE build chain` \
+  device-tree-compiler \
+  libgnutls28-dev \
+  libxml2-dev \
+  libssl-dev \
+  pkgconf \
+  pkg-config \
+  wget \
+  zlib1g-dev \
+  \
+  `# gadget snap: Python crypto / ELF utilities for OP-TEE` \
+  python3-cryptography \
+  python3-pyelftools \
+  python3-pycryptodome \
+  \
+  `# kernel deb: Rust module bindings, docs, and health-check tools` \
+  bindgen \
+  rustfmt \
+  rustc \
+  rust-src \
+  cargo \
+  xmlto \
+  \
+  `# initrd plugin: arm64 chroot via qemu user-mode + binfmt registration` \
+  qemu-user \
+  qemu-user-binfmt
+
+# The initrd plugin builds an arm64 chroot and runs binaries inside it via
+# qemu user-mode emulation. That requires the binfmt_misc handler for aarch64
+# to be registered. qemu-user-binfmt ships the handler, but it needs the
+# binfmt_misc filesystem mounted and the systemd-binfmt generator to run.
+echo "[renesas-resolute-build] Registering qemu binfmt handlers for arm64..."
+if [ ! -e /proc/sys/fs/binfmt_misc/register ]; then
+  mount -t binfmt_misc binfmt_misc /proc/sys/fs/binfmt_misc 2>/dev/null || true
+fi
+# (Re)load the binfmt definitions shipped by qemu-user-binfmt.
+/usr/lib/systemd/systemd-binfmt 2>/dev/null || systemctl restart systemd-binfmt 2>/dev/null || true
+if [ -e /proc/sys/fs/binfmt_misc/qemu-aarch64 ]; then
+  echo "[renesas-resolute-build] qemu-aarch64 binfmt handler registered."
+else
+  echo "[renesas-resolute-build] WARNING: qemu-aarch64 binfmt handler not registered;" >&2
+  echo "[renesas-resolute-build]   the initrd part's arm64 chroot may fail." >&2
+fi
+
+echo "[renesas-resolute-build] setup-base complete."

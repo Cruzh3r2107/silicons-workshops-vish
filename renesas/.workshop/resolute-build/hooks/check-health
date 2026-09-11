@@ -1,0 +1,35 @@
+#!/bin/bash
+# Health check: verifies the build environment is correctly configured.
+set -euo pipefail
+
+fail() { echo "[renesas-resolute-build] FAIL: $*" >&2; workshopctl set-health error "$*"; exit 1; }
+ok()   { workshopctl set-health okay; }
+
+# snapcraft must be present and tracking latest/edge.
+command -v snapcraft >/dev/null 2>&1 || fail "snapcraft not installed"
+snapcraft_channel=$(snap info snapcraft 2>/dev/null | awk '/^tracking:/{print $2}')
+case "${snapcraft_channel}" in
+  latest/edge*) ;;
+  *) echo "[renesas-resolute-build] WARNING: snapcraft is tracking '${snapcraft_channel}', expected latest/edge" ;;
+esac
+
+# Both arm64 and armhf foreign architectures must be registered.
+for arch in arm64 armhf; do
+  dpkg --print-foreign-architectures | grep -qx "${arch}" \
+    || fail "foreign architecture '${arch}' not registered (dpkg --add-architecture ${arch})"
+done
+
+# Cross-compilation toolchains and essential build tools.
+for tool in \
+  fakeroot \
+  aarch64-linux-gnu-gcc \
+  arm-linux-gnueabihf-gcc \
+  bindgen \
+  rustfmt \
+  rustc \
+  xmlto \
+  debuild dpkg-buildpackage dch; do
+  command -v "${tool}" >/dev/null 2>&1 || fail "'${tool}' not found"
+done
+
+ok
