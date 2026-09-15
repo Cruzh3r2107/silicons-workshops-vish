@@ -8,8 +8,9 @@
 # or hand-patch the tree before building) without re-hitting the network.
 #
 # Private git+ssh:// repositories authenticate via the forwarded ssh-agent.
-# For private Launchpad repos, set your Launchpad user in ~/.ssh/config
-# (outside the workshop); public https:// repos need nothing.
+# For Launchpad repos, the SSH login name is mapped from identity.launchpad_user
+# in config/workshop.yaml by the workshop setup hooks; public https:// repos
+# need nothing.
 
 [[ -n "${_WORKSHOP_SOURCE_SH:-}" ]] && return 0
 _WORKSHOP_SOURCE_SH=1

@@ -74,6 +74,7 @@ def get(d, *keys, default=''):
     return d if d is not None else default
 
 print(f"CFG_SCHEMA_VERSION={get(cfg,'schema_version',default='1')}")
+print(f"CFG_IDENTITY_LAUNCHPAD_USER={get(cfg,'identity','launchpad_user')}")
 print(f"CFG_SILICON_VENDOR={get(cfg,'silicon','vendor')}")
 print(f"CFG_SILICON_SOC={get(cfg,'silicon','soc')}")
 print(f"CFG_SILICON_BOARD={get(cfg,'silicon','board')}")

@@ -18,9 +18,13 @@ kernel source. What gets built is controlled declaratively in
 - Network access to the configured kernel repository. The checked-in defaults
   use **public** Launchpad repos (`https://`, no auth needed).
 - Only if a repo is **private** (`git+ssh://…`): load your key into ssh-agent
-  (`ssh-add -l` to verify) and connect the ssh-agent plug (see §3). For a
-  private Launchpad host that needs an explicit user, add it to your **own**
-  `~/.ssh/config` outside the workshop — never to project config.
+  (`ssh-add -l` to verify) and connect the ssh-agent plug (see §3). For
+  **private Launchpad** repos also set `identity.launchpad_user` in
+  `config/workshop.yaml` (see §2): Launchpad identifies accounts by the SSH
+  login name, and inside the workshop the build users are `workshop`/root, so
+  without that mapping clones fail with
+  *"Launchpad user 'workshop' doesn't have a registered SSH key"*. The setup
+  hooks write the mapping into the container's ssh configs for you.
 
 The build host (cross-toolchains, snapcraft, rust, qemu binfmt, kernel
 build-deps) is provisioned automatically by the workshop's setup hooks — you do
@@ -34,6 +38,8 @@ not install those yourself.
 defaults describe the reference RZ/T2H EVK and work as-is. Adjust if needed:
 
 ```yaml
+identity:
+  launchpad_user: your-lp-username   # needed only for private git+ssh Launchpad repos
 silicon:
   soc: rzt2h            # rzt2h | rzn2h (used by gadget)
   board: rzt2h-evk      # not needed
@@ -79,6 +85,20 @@ Only if you use a **private** repo, connect ssh-agent (plug lives on each SDK):
 ```
 workshop connect renesas-resolute/deb-sdk:ssh-agent
 ```
+
+> **One plug per slot:** the system `ssh-agent` slot accepts only ONE connected
+> plug at a time. Each SDK (`deb-sdk`, `snap-sdk`) and the build host have
+> their own plug, so connect the one whose commands you are about to run —
+> e.g. `kernel-build-debs` runs on `deb-sdk`, `kernel-build-snap` and
+> `gadget-build` on `snap-sdk`. If you get
+> *"ssh-agent interface already connected"*, swap it over:
+>
+> ```
+> workshop disconnect renesas-resolute/deb-sdk:ssh-agent
+> workshop connect renesas-resolute/snap-sdk:ssh-agent
+> ```
+>
+> Re-running `workshop connect` after an `ssh-add` picks up newly added keys.
 
 ---
 
@@ -194,7 +214,9 @@ Set these inline before `workshop run`:
 |---------|--------------------|
 | `cannot infer workshop name: multiple workshops found` | You omitted the workshop name. Use `workshop run renesas-resolute -- <command>` (or `renesas-noble`). |
 | `kernel-src not found` | You haven't cloned yet — run `workshop run <workshop> -- clone-kernel`. |
-| `git clone failed` / permission denied | Private repo without auth: check `ssh-add -l` shows a key and connect the plug (`workshop connect <workshop>/deb-sdk:ssh-agent`). Public `https://` repos need nothing. |
+| `git clone failed` / permission denied | Private repo without auth: check `ssh-add -l` shows a key and connect the plug on the SDK running the command (`workshop connect <workshop>/deb-sdk:ssh-agent` for debs, `.../snap-sdk:ssh-agent` for snaps/gadget). Public `https://` repos need nothing. |
+| `Launchpad user 'workshop' doesn't have a registered SSH key` | Private Launchpad repo: set `identity.launchpad_user` in `config/workshop.yaml` and re-launch (hooks write the ssh `User` mapping). See §1/§2. |
+| `ssh-agent interface already connected` | The ssh-agent slot takes one plug only — disconnect the other SDK's plug first, then connect the one you need (see §3). |
 | `debian/rules not found` | The configured `kernel.ref` is not an Ubuntu kernel packaging tree — check `kernel.repository` / `ref` in `config/workshop.yaml`, then re-run `clone-kernel`. |
 | `No snapcraft.yaml found` (snap) | The kernel repo does not ship `snap/snapcraft.yaml` for the checked-out ref. |
 | Permission denied during `debian/rules clean` | A prior root snap build left root-owned files; the deb command resets ownership automatically (disable with `SKIP_CHOWN=1`). |

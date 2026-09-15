@@ -3,12 +3,13 @@
 # Adds SSH host keys so git clones don't prompt, and (optionally) imports a
 # local GPG signing key.
 #
-# No credentials/identity are read from project configuration (contract §14).
-# Public https:// repos need no setup. For a PRIVATE git+ssh:// kernel or
-# gadget repo, load your key into ssh-agent and connect the ssh-agent plug:
-#     workshop connect renesas-noble/deb-sdk:ssh-agent
-# and, if the host needs an explicit Launchpad user, add it to your OWN
-# ~/.ssh/config outside the workshop (never to project config).
+# No credentials are read from project configuration (contract §14): private
+# git+ssh:// repos authenticate via the forwarded ssh-agent plug:
+#     workshop connect renesas-noble/<sdk>:ssh-agent
+# Your Launchpad username is identity, not a credential: it comes from
+# config/workshop.yaml (identity.launchpad_user) and is mapped here into the
+# SSH configs, because Launchpad identifies accounts by SSH login name and the
+# build users here ('workshop', root) are not Launchpad accounts.
 set -euo pipefail
 
 # Add github.com and git.launchpad.net host keys for both the workshop user and
@@ -25,6 +26,26 @@ for host in github.com git.launchpad.net; do
     fi
   done
 done
+
+# Map git.launchpad.net SSH logins to the developer's Launchpad username
+# (identity.launchpad_user in config/workshop.yaml). Applied for BOTH the
+# workshop user and root: plain git clones run as the workshop user, but
+# snapcraft --destructive-mode clones sources as root.
+LP_USER="$(python3 -c "
+import yaml
+cfg = yaml.safe_load(open('/project/config/workshop.yaml')) or {}
+print((cfg.get('identity') or {}).get('launchpad_user') or '')
+")"
+if [ -n "$LP_USER" ]; then
+  for sshdir in ~/.ssh /root/.ssh; do
+    sudo mkdir -p "$sshdir" 2>/dev/null || mkdir -p "$sshdir"
+    if ! sudo grep -q "^Host git.launchpad.net$" "$sshdir/config" 2>/dev/null; then
+      echo "[renesas-noble-build] Mapping git.launchpad.net ssh user to '$LP_USER' in $sshdir/config..."
+      printf 'Host git.launchpad.net\n  User %s\n' "$LP_USER" | sudo tee -a "$sshdir/config" >/dev/null
+      sudo chmod 600 "$sshdir/config"
+    fi
+  done
+fi
 
 if [ -f /project/config/gpg-signing-key.asc ]; then
   echo "[renesas-noble-build] Importing GPG signing key from config/gpg-signing-key.asc..."
