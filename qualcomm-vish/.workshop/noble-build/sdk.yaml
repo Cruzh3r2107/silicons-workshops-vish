@@ -1,0 +1,21 @@
+name: noble-build
+version: "0.1"
+title: Qualcomm Kernel Build Host SDK (Ubuntu 24.04 Noble)
+summary: Build-host provisioning for the Qualcomm Silicon Workshop on Ubuntu 24.04
+description: |
+  Provisions the Qualcomm build host on Ubuntu 24.04 Noble: snapcraft
+  (latest/edge, for the initrd plugin), the arm64 foreign architecture and
+  cross-toolchain, kernel/BSP build dependencies, Debian/Ubuntu packaging
+  tooling, Ubuntu Core initrd assembly deps, and qemu binfmt for the snap
+  initrd part's foreign-arch chroot.
+
+  This is a build-host provisioning SDK (hooks only) — it is NOT one of the two
+  functional SDKs (deb-sdk, snap-sdk). Pairs with .workshop/qcom-noble.yaml.
+license: GPL-2.0-only
+
+plugs:
+  ssh-agent:
+    interface: ssh-agent
+  ccache:
+    interface: mount
+    workshop-target: /home/workshop/.cache/ccache

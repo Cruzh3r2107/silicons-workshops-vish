@@ -1,0 +1,17 @@
+# Runtime / build directories (never committed).
+kernel-src/
+out/
+cache/
+build/
+
+# Snap SDK staging + build artifacts.
+sdk/snap/snapcraft/build-inputs/*.deb
+sdk/snap/snapcraft/build-inputs/*.dtb
+sdk/snap/snapcraft/parts/
+sdk/snap/snapcraft/stage/
+sdk/snap/snapcraft/prime/
+sdk/snap/snapcraft/*.snap
+
+# Local per-developer identity/secrets (contract §14 — never committed).
+config/board.env
+config/gpg-signing-key.asc

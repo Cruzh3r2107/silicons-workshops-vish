@@ -1,0 +1,38 @@
+#!/bin/bash
+# check-health — verifies the Qualcomm build host is correctly provisioned.
+set -euo pipefail
+
+fail() { echo "[qcom-noble-build] FAIL: $*" >&2; workshopctl set-health error "$*"; exit 1; }
+ok()   { workshopctl set-health okay; }
+
+# arm64 foreign architecture must be registered (unless building natively).
+HOST_ARCH="$(dpkg --print-architecture)"
+if [ "$HOST_ARCH" != "arm64" ]; then
+  dpkg --print-foreign-architectures | grep -qx arm64 \
+    || fail "foreign architecture 'arm64' not registered (dpkg --add-architecture arm64)"
+fi
+
+# Cross-toolchain + essential build/packaging tools for the deb-SDK.
+for tool in \
+  aarch64-linux-gnu-gcc \
+  dtc \
+  fakeroot \
+  dpkg-buildpackage \
+  dwarfdump \
+  python3; do
+  command -v "${tool}" >/dev/null 2>&1 || fail "'${tool}' not found (deb-SDK dependency)"
+done
+
+# python3-yaml is required to parse config/workshop.yaml.
+python3 -c 'import yaml' 2>/dev/null || fail "python3 yaml module missing (apt install python3-yaml)"
+
+# Snap-SDK tools are optional (only needed for kernel-build-snap); warn only.
+command -v snapcraft >/dev/null 2>&1 \
+  || echo "[qcom-noble-build] WARNING: snapcraft not installed — kernel-build-snap unavailable (see README §3b)"
+command -v unsquashfs >/dev/null 2>&1 \
+  || echo "[qcom-noble-build] WARNING: squashfs-tools missing — snap validation will be skipped"
+[ -x /usr/bin/qemu-aarch64-static ] || [ -x /usr/bin/qemu-aarch64 ] \
+  || echo "[qcom-noble-build] WARNING: qemu-aarch64 user emulation missing — snap initrd chroot will fail"
+
+ok
+echo "[qcom-noble-build] health OK: deb-SDK toolchain present."

@@ -1,0 +1,110 @@
+# Goal 3 — kernel snap for Rubik Pi 3 (QCS6490), WITH an Ubuntu Core initrd,
+# built the way the official Ubuntu Core guide prescribes:
+#   https://documentation.ubuntu.com/core/how-to-guides/image-creation/build-a-kernel-snap/
+#
+# Key correction to our earlier "cross-initrd is unfixable on x86" conclusion:
+# it IS fixable. The guide's dedicated `initrd` plugin assembles the arm64
+# initrd inside a chroot that runs target-arch binaries under binfmt/qemu-user
+# emulation on the amd64 host. We simply never set that up before.
+#
+# Structure (two parts):
+#   kernel  — stage the Goal-2 Ubuntu debs (linux-image + linux-modules -rubikpi)
+#             into the exact layout the initrd plugin reads:
+#               ${CRAFT_STAGE}/modules/<kver>/...   (KERNEL_MODULES)
+#               ${CRAFT_STAGE}/vmlinuz-<kver>       (KERNEL_IMAGE)
+#             plus kernel.img + dtbs + config for the snap itself. This reuses
+#             our validated Goal-2 debs instead of recompiling the kernel.
+#   initrd  — snapcraft's `initrd` plugin builds initrd.img from those modules.
+#
+# (The alternative, fully-from-source path is kernel-ubuntu-debian-package: true
+#  on the rubikpi flavour source tree — same initrd plugin on top. We use the
+#  deb-reuse form here because it needs no kernel rebuild and reuses Goal 2.)
+#
+# ── BUILD REQUIREMENTS (verified 2026-07-14 on Ubuntu 26.04) ─────────────────
+#  1. snapcraft with the `initrd` plugin + core24 kernel plugin. Released 9.0.1
+#     does NOT have them; latest/edge (9.0.0.postN) DOES (verified). Refresh:
+#         sudo snap refresh snapcraft --channel=latest/edge
+#  2. Host must execute arm64 binaries (for the initrd chroot). On 26.04:
+#         sudo apt install binfmt-support qemu-user-binfmt qemu-user
+#     (Plucky and earlier: sudo apt install qemu-user-static)
+#  Then, from this directory:
+#         snapcraft --build-for=arm64            # or --destructive-mode
+#
+# STATUS: BUILT & VERIFIED 2026-07-14 on an Ubuntu 26.04 x86 host with the setup
+# above. Packed rubikpi-kernel_6.8.0-1053_arm64.snap (161M) containing a real
+# initrd.img (25M systemd initramfs) + kernel.img + modules + dtb. Not yet booted
+# on hardware (needs a Core image + model assertion). See WRITEUP.md.
+name: rubikpi-kernel
+version: '6.8.0-1053'
+summary: Rubik Pi 3 (QCS6490) Ubuntu Core kernel
+description: |
+  Ubuntu Core kernel snap for the Rubik Pi 3 (Qualcomm QCS6490): the qcom-kbuild
+  Goal-2 Ubuntu kernel (linux-image/linux-modules -rubikpi) packaged as a
+  type: kernel snap WITH an Ubuntu Core initrd assembled by snapcraft's initrd
+  plugin.
+type: kernel
+build-base: core24
+confinement: strict
+grade: stable
+
+platforms:
+  arm64:
+    build-on: [amd64, arm64]
+    build-for: [arm64]
+
+parts:
+  kernel:
+    plugin: nil
+    build-packages: [kmod]
+    # Goal-2 Path-1 debs + board dtb, staged into build-inputs/ so a managed
+    # (LXD) build can mount them (see build-inputs/README). Populate with:
+    #   mkdir -p build-inputs && cp \
+    #     ../artifacts/rubikpi3/deb-ubuntu/linux-image-*-rubikpi_*_arm64.deb \
+    #     ../artifacts/rubikpi3/deb-ubuntu/linux-modules-*-rubikpi_*_arm64.deb \
+    #     ../artifacts/rubikpi3/qcs6490-thundercomm-rubikpi3.dtb  build-inputs/
+    source: build-inputs
+    source-type: local
+    override-build: |
+      set -eu
+      W="${CRAFT_PART_BUILD}/x"; rm -rf "$W"; mkdir -p "$W"
+      for d in "${CRAFT_PART_SRC}"/linux-image-*-rubikpi_*_arm64.deb \
+               "${CRAFT_PART_SRC}"/linux-modules-*-rubikpi_*_arm64.deb; do
+        dpkg-deb -x "$d" "$W"
+      done
+      KREL="$(ls "$W"/lib/modules)"
+      I="${CRAFT_PART_INSTALL}"
+
+      # Regenerate module metadata (modules.alias/dep/symbols). The linux-modules
+      # deb ships only modules.builtin/order; the full set is normally produced by
+      # the deb's postinst depmod, which our extract-only path skips, and
+      # ubuntu-core-initramfs needs it. depmod is arch-neutral (reads ELF modinfo,
+      # runs nothing), so it works on x86 for the arm64 modules.
+      depmod -b "$W" "$KREL"
+
+      # --- layout the initrd plugin consumes from ${CRAFT_STAGE} ---
+      # KERNEL_IMAGE = ${CRAFT_STAGE}/vmlinuz-<kver>
+      cp "$W"/boot/vmlinuz-* "$I/vmlinuz-${KREL}"
+      # KERNEL_MODULES = ${CRAFT_STAGE}/modules/<kver>/...
+      mkdir -p "$I/modules"
+      cp -a "$W/lib/modules/${KREL}" "$I/modules/${KREL}"
+      rm -f "$I/modules/${KREL}/build" "$I/modules/${KREL}/source"
+
+      # --- payload the kernel snap itself ships ---
+      cp "$W"/boot/vmlinuz-* "$I/kernel.img"
+      cp "$W"/boot/config-*  "$I/" 2>/dev/null || true
+      mkdir -p "$I/dtbs"
+      cp "${CRAFT_PART_SRC}"/qcs6490-thundercomm-rubikpi3.dtb "$I/dtbs/" 2>/dev/null || true
+      mkdir -p "$I/firmware"
+      echo "staged kernel ${KREL}: vmlinuz + modules for the initrd plugin"
+
+  initrd:
+    after: [kernel]
+    plugin: initrd
+    # Modules the initrd needs to reach the Rubik Pi 3 root device. The plugin
+    # pulls in their dependencies automatically; extend with the board's storage
+    # drivers (e.g. ufs_qcom, phy-qcom-qmp*, sd*/mmc) for a real on-device boot.
+    initrd-modules:
+      - ext4
+      - ufs_qcom
+    # Produce a discrete kernel + initrd (Rubik Pi 3 is not an EFI/GRUB target).
+    initrd-build-efi-image: false

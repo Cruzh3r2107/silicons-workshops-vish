@@ -1,0 +1,51 @@
+#!/bin/bash
+# setup-project — runs as the workshop user, in /project, after the project is
+# mounted. Adds SSH host keys so git clones don't prompt, and maps the
+# Launchpad SSH login for private git+ssh:// Launchpad repos.
+#
+# No credentials are read from project configuration (contract §14): private
+# git+ssh:// repos authenticate via the forwarded ssh-agent plug:
+#     workshop connect qcom-noble/<sdk>:ssh-agent
+# The reference kernel tree is public https:// and needs none of this.
+set -euo pipefail
+
+log() { echo "[qcom-noble-build] $*"; }
+
+# Add github.com and git.launchpad.net host keys for both the workshop user and
+# root (snapcraft --destructive-mode clones as root) so clones don't hang on an
+# interactive host-key prompt.
+for host in github.com git.launchpad.net; do
+  for knownhosts in ~/.ssh/known_hosts /root/.ssh/known_hosts; do
+    dir=$(dirname "$knownhosts")
+    sudo mkdir -p "$dir" 2>/dev/null || mkdir -p "$dir"
+    if ! grep -q "${host}" "$knownhosts" 2>/dev/null; then
+      log "Adding ${host} host keys to ${knownhosts}..."
+      ssh-keyscan -t rsa,ecdsa,ed25519 "${host}" 2>/dev/null \
+        | sudo tee -a "$knownhosts" >/dev/null
+    fi
+  done
+done
+
+# Map git.launchpad.net SSH logins to the developer's Launchpad username
+# (identity.launchpad_user in config/workshop.yaml). Applied for BOTH the
+# workshop user and root. Empty for the public reference config (no-op).
+LP_USER="$(python3 -c "
+import yaml
+cfg = yaml.safe_load(open('/project/config/workshop.yaml')) or {}
+print((cfg.get('identity') or {}).get('launchpad_user') or '')
+" 2>/dev/null || true)"
+if [ -n "$LP_USER" ]; then
+  for sshdir in ~/.ssh /root/.ssh; do
+    sudo mkdir -p "$sshdir" 2>/dev/null || mkdir -p "$sshdir"
+    if ! sudo grep -q "^Host git.launchpad.net$" "$sshdir/config" 2>/dev/null; then
+      log "Mapping git.launchpad.net ssh user to '$LP_USER' in $sshdir/config..."
+      printf 'Host git.launchpad.net\n  User %s\n' "$LP_USER" | sudo tee -a "$sshdir/config" >/dev/null
+      sudo chmod 600 "$sshdir/config"
+    fi
+  done
+fi
+
+log "Ready."
+log "  1) workshop run qcom-noble -- clone-kernel"
+log "  2) workshop run qcom-noble -- kernel-build-debs   (then kernel-build-snap)"
+log "setup-project complete."
