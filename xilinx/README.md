@@ -1,15 +1,16 @@
-# AMD Kria KV260 Silicon Workshop
+# AMD/Xilinx Silicon Workshop
 
-Builds and packages the Ubuntu 24.04 `linux-xilinx` kernel for the AMD Kria
-KV260 (K26 SOM + KV carrier), following
-[`SILICON_WORKSHOP_CONTRACT.md`](SILICON_WORKSHOP_CONTRACT.md).
+Builds and packages the Ubuntu 24.04 `linux-xilinx` kernel for AMD/Xilinx
+boards, following [`SILICON_WORKSHOP_CONTRACT.md`](SILICON_WORKSHOP_CONTRACT.md).
+The checked-in `project.yaml` targets the reference EVK, the AMD Kria KV260
+(K26 SOM + KV carrier); other boards are described by editing `project.yaml`.
 
 ## Quick start
 
     workshop launch                        # first time only
     workshop run -- build                  # kernel -> debs -> snap (out/snap/)
 
-Actions defined in `.workshop/kria.yaml` (each wraps one SDK command, which
+Actions defined in `.workshop/xilinx.yaml` (each wraps one SDK command, which
 rebuilds out-of-date prerequisites itself):
 
 | Action | Runs | Output |
