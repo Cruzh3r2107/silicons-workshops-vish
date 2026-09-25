@@ -83,16 +83,31 @@ EOF
 	git $GIT_IDENT commit -q -m "workshop: project inputs"
 }
 
-# kb_builddeps: ensure the tree's arm64 cross build-deps are installed.
-# Needs debian/control, which `debian/rules clean` generates.
+# kb_builddeps: ensure the build-deps for cross-building the kernel are
+# installed. Needs debian/control, which `debian/rules clean` generates.
+# Ubuntu's control does not mark build tools (gcc, python3, clang, rustc) as
+# build-machine packages, so resolving it for arm64 asks for arm64 tools. A
+# kernel-only cross build (do_tools=false) needs the deps for the build
+# machine plus the cross compiler the tree names; no arm64 libraries.
 kb_builddeps() {
 	cd "$LINUX_DIR"
-	dpkg-checkbuilddeps -a"$DEB_ARCH" -B debian/control && return 0
+	_kb_cc=$(grep -o "gcc-[0-9]*-${CROSS%-}" debian/control | head -n 1)
+	_kb_missing=
+	dpkg-checkbuilddeps -B debian/control || _kb_missing=1
+	if [ -n "$_kb_cc" ] &&
+		! dpkg-query -W -f '${Status}' "$_kb_cc" 2>/dev/null | grep -q 'install ok installed'; then
+		echo "missing cross compiler: $_kb_cc"
+		_kb_missing=1
+	fi
+	[ -n "$_kb_missing" ] || return 0
 	sudo -n true 2>/dev/null ||
-		die "missing build dependencies (listed above); run: sudo apt-get build-dep -a $DEB_ARCH --arch-only $LINUX_DIR"
+		die "missing build dependencies (listed above); run: sudo apt-get build-dep --arch-only $LINUX_DIR${_kb_cc:+ && sudo apt-get install $_kb_cc}"
 	sudo apt-get update
-	sudo DEBIAN_FRONTEND=noninteractive apt-get build-dep -y -a"$DEB_ARCH" --arch-only "$LINUX_DIR"
-	dpkg-checkbuilddeps -a"$DEB_ARCH" -B debian/control
+	sudo DEBIAN_FRONTEND=noninteractive apt-get build-dep -y --arch-only "$LINUX_DIR"
+	if [ -n "$_kb_cc" ]; then
+		sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$_kb_cc"
+	fi
+	dpkg-checkbuilddeps -B debian/control
 }
 
 kb_build() {

@@ -100,6 +100,12 @@ class KernelBuildTests(unittest.TestCase):
         self.assertNotIn("up to date", r.stdout)
         self.assertEqual(self.builds(), 3)
 
+    def test_build_deps_are_resolved_for_the_build_machine(self):
+        # Ubuntu's control lists arch-restricted deps that only apply to native
+        # arm64 builds; a cross build must check deps for the build machine.
+        r = self.build(FAKE_ARM64_ONLY_DEP="1")
+        self.assertEqual(r.returncode, 0, r.stderr)
+
     def test_rejects_arguments(self):
         r = run(["kernel-build", "--fast"], self.proj)
         self.assertNotEqual(r.returncode, 0)

@@ -79,8 +79,11 @@ def deb(pkg, files):
 if target == "clean":
     shutil.rmtree(tree / "debian" / "build", ignore_errors=True)
     shutil.copy(tree / "debian.xilinx" / "changelog", tree / "debian" / "changelog")
+    # FAKE_ARM64_ONLY_DEP mimics Ubuntu's control: a dependency restricted to
+    # arm64 that must not be required when cross-building on amd64.
+    deps = "Build-Depends: workshop-test-nonexistent-dep [arm64]\n" if os.environ.get("FAKE_ARM64_ONLY_DEP") else ""
     (tree / "debian" / "control").write_text(
-        "Source: linux-xilinx\n\nPackage: linux-image-fake\nArchitecture: arm64\nDescription: fake\n")
+        f"Source: linux-xilinx\n{deps}\nPackage: linux-image-fake\nArchitecture: arm64\nDescription: fake\n")
 elif target == "build-xilinx":
     if os.environ.get("FAKE_FAIL_BUILD"):
         sys.exit("fake build failure")
