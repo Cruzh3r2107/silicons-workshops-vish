@@ -8,6 +8,7 @@ KV260 (K26 SOM + KV carrier), following
 
     workshop launch
     workshop exec -- kernel-build          # out/kernel/
+    workshop exec -- kernel-build-debs     # out/deb/ (runs kernel-build first if needed)
 
 ## Commands
 
@@ -15,6 +16,7 @@ KV260 (K26 SOM + KV carrier), following
 |---|---|
 | `kernel-build` | Clones the pinned Ubuntu kernel, applies `patches/`, `overlays/` and `kernel.config`, builds with Ubuntu's `debian/rules`, stages and validates `out/kernel/` |
 | `kernel-clean` | Removes generated build state and `out/`; keeps the git clone and project inputs |
+| `kernel-build-debs` | Runs `debian/rules binary-xilinx` on the validated build; writes and validates `out/deb/*.deb` (version suffix `+workshop1`) |
 
 Each command validates its outputs before succeeding and, when neither
 `project.yaml` inputs nor SDK code have changed, reuses valid outputs instead
