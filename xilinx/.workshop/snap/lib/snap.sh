@@ -4,8 +4,8 @@
 SNAP_DIR="$BUILD_DIR/snap"
 ARCHIVE_DIR="$SNAP_DIR/archive"
 SNAP_PROJECT="$SNAP_DIR/project"
-APT_SOURCE=/etc/apt/sources.list.d/workshop-local.sources
-APT_PIN=/etc/apt/preferences.d/workshop-local
+: "${APT_SOURCE:=/etc/apt/sources.list.d/workshop-local.sources}"
+: "${APT_PIN:=/etc/apt/preferences.d/workshop-local}"
 
 # snap_check_host: the initrd plugin runs arm64 binaries in a chroot. Prove
 # they execute here (host qemu-user-static binfmt with the F flag) by running
@@ -53,11 +53,16 @@ snap_render() {
 # Destructive mode builds in this (disposable) Workshop, whose base matches
 # core24, and installs build packages with apt, so it runs as root.
 snap_pack() {
-	trap snap_unpublish_archive EXIT
+	# Whether snapcraft succeeds, fails or is interrupted (Ctrl-C), hand the
+	# root-owned parts/stage/prime back and remove the local apt source, so
+	# later runs and kernel-clean can delete build/snap.
+	trap 'sudo chown -R "$(id -u):$(id -g)" "$SNAP_PROJECT"; snap_unpublish_archive' EXIT
+	trap 'exit 1' INT TERM HUP
 	snap_publish_archive
 	cd "$SNAP_PROJECT"
-	sudo snapcraft pack --destructive-mode --build-for="$DEB_ARCH"
-	sudo chown -R "$(id -u):$(id -g)" "$SNAP_PROJECT"
+	# Verbose, so plugin and initrd output lands in the stage log rather than
+	# only in root's snapcraft log.
+	sudo snapcraft pack --destructive-mode --build-for="$DEB_ARCH" --verbosity=verbose
 }
 
 snap_collect() {
@@ -70,9 +75,14 @@ snap_collect() {
 		--kernel-dir "$OUT_DIR/kernel"
 }
 
+# Returns non-zero (never exits) so the reuse check can fall through to a
+# rebuild when the snap is missing.
 snap_validate() {
 	set -- "$OUT_DIR"/snap/*.snap
-	[ -e "$1" ] || die "no snap in $OUT_DIR/snap"
+	if [ ! -e "$1" ]; then
+		echo "validation: no snap in $OUT_DIR/snap" >&2
+		return 1
+	fi
 	python3 "$SDK_DIR/lib/validate_snap.py" check --project "$PROJECT_DIR" --snap "$1" \
 		--kernel-dir "$OUT_DIR/kernel" --dts-subdir "$DTS_SUBDIR"
 }
