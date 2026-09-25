@@ -60,9 +60,19 @@ snap_pack() {
 	trap 'exit 1' INT TERM HUP
 	snap_publish_archive
 	cd "$SNAP_PROJECT"
-	# Verbose, so plugin and initrd output lands in the stage log rather than
-	# only in root's snapcraft log.
-	sudo snapcraft pack --destructive-mode --build-for="$DEB_ARCH" --verbosity=verbose
+	# Verbose, so plugin and initrd output lands in the stage log. The
+	# snap-confined snapcraft cannot write to the inherited log file
+	# descriptor, so its output goes through a pipe; the status is kept aside
+	# because POSIX sh has no pipefail.
+	_sn_status="$SNAP_DIR/snapcraft.status"
+	{
+		if sudo snapcraft pack --destructive-mode --build-for="$DEB_ARCH" --verbosity=verbose 2>&1; then
+			echo 0 >"$_sn_status"
+		else
+			echo $? >"$_sn_status"
+		fi
+	} | cat
+	[ "$(cat "$_sn_status")" = 0 ] || die "snapcraft failed (exit $(cat "$_sn_status"))"
 }
 
 snap_collect() {

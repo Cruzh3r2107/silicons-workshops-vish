@@ -57,6 +57,11 @@ from pathlib import Path
 import yaml
 with open(os.environ["STUB_LOG"], "a") as log:
     log.write("SNAPCRAFT-STUB " + " ".join(sys.argv[1:]) + "\n")
+# Like the real (snap-confined) snapcraft: output written to an inherited
+# regular-file descriptor is lost; only pipes/ttys receive it.
+import stat
+if not stat.S_ISREG(os.fstat(1).st_mode):
+    print("PLUGIN-OUTPUT: building kernel and initrd parts", flush=True)
 if os.environ.get("FAKE_SNAPCRAFT_FAIL"):
     Path("parts").mkdir(exist_ok=True)
     sys.exit("snapcraft: simulated failure")
@@ -144,6 +149,12 @@ class SnapMainTests(unittest.TestCase):
     def test_snapcraft_runs_verbose_so_its_output_reaches_the_stage_log(self):
         self.assertEqual(self.build().returncode, 0)
         self.assertIn("--verbosity=verbose", self.snapcraft_runs()[0])
+        self.assertIn("PLUGIN-OUTPUT", (self.proj / "build/logs/snapcraft.log").read_text())
+
+    def test_snapcraft_failure_status_survives_the_output_pipe(self):
+        r = self.build(FAKE_SNAPCRAFT_FAIL="1")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("PLUGIN-OUTPUT", (self.proj / "build/logs/snapcraft.log").read_text())
 
     def test_failed_snapcraft_restores_ownership_and_unpublishes_archive(self):
         r = self.build(FAKE_SNAPCRAFT_FAIL="1")
