@@ -1,0 +1,25 @@
+# Silicon Workshop project configuration.
+# Default: AMD Kria KV260 Vision AI Starter Kit (K26 SOM + KV carrier revA/revB),
+# Ubuntu 24.04 (noble) linux-xilinx kernel.
+schema: 1
+
+silicon:
+  vendor: amd-xilinx
+  family: zynqmp
+  board: kv260
+
+ubuntu:
+  release: noble
+
+kernel:
+  source:
+    repository: https://git.launchpad.net/~canonical-kernel/ubuntu/+source/linux-xilinx/+git/noble
+    ref: Ubuntu-xilinx-6.8.0-1036.37
+  flavour: xilinx
+  config: {}
+  device_trees:
+    - xilinx/zynqmp-smk-k26-revA-sck-kv-g-revA.dtb
+    - xilinx/zynqmp-smk-k26-revA-sck-kv-g-revB.dtb
+
+patches: []
+overlays: []
