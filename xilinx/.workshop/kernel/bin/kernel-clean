@@ -1,0 +1,9 @@
+#!/bin/sh
+# kernel-clean: remove generated kernel build state and outputs.
+set -eu
+: "${PROJECT_DIR:=/project}"
+SDK_DIR=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+. "$PROJECT_DIR/lib/common/common.sh"
+. "$PROJECT_DIR/lib/common/ubuntu-kernel.sh"
+. "$SDK_DIR/lib/kernel.sh"
+kernel_clean_main "$@"
