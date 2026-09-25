@@ -4,3 +4,12 @@ sdks:
   - name: project-kernel
   - name: project-debian
   - name: project-snap
+
+# Shortcuts for `workshop run -- <action>`. Each wraps one public SDK command;
+# the commands already rebuild prerequisites that are out of date.
+actions:
+  build: kernel-build-snap      # everything: kernel -> debs -> snap
+  kernel: kernel-build          # out/kernel/
+  debs: kernel-build-debs       # out/deb/ (+ kernel)
+  clean: kernel-clean           # remove build outputs, keep the git clone
+  test: cd /project && python3 -m unittest discover -s tests -t . "$@"

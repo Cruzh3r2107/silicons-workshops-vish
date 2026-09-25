@@ -6,10 +6,21 @@ KV260 (K26 SOM + KV carrier), following
 
 ## Quick start
 
-    workshop launch
-    workshop exec -- kernel-build          # out/kernel/
-    workshop exec -- kernel-build-debs     # out/deb/ (runs kernel-build first if needed)
-    workshop exec -- kernel-build-snap     # out/snap/ (runs kernel-build-debs first if needed)
+    workshop launch                        # first time only
+    workshop run -- build                  # kernel -> debs -> snap (out/snap/)
+
+Actions defined in `.workshop/kria.yaml` (each wraps one SDK command, which
+rebuilds out-of-date prerequisites itself):
+
+| Action | Runs | Output |
+|---|---|---|
+| `workshop run -- build` | `kernel-build-snap` | `out/kernel/`, `out/deb/`, `out/snap/` |
+| `workshop run -- kernel` | `kernel-build` | `out/kernel/` |
+| `workshop run -- debs` | `kernel-build-debs` | `out/kernel/`, `out/deb/` |
+| `workshop run -- clean` | `kernel-clean` | removes build outputs, keeps the git clone |
+| `workshop run -- test` | the unit tests | — |
+
+The commands can also be run directly, e.g. `workshop exec -- kernel-build-debs`.
 
 ## Commands
 
