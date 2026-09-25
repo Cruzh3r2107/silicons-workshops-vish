@@ -2,3 +2,4 @@ name: kria
 base: ubuntu@24.04
 sdks:
   - name: project-kernel
+  - name: project-debian
