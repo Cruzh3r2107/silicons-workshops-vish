@@ -49,6 +49,10 @@ of rebuilding. On failure the failing stage is named and its log is under
 
 Edit `project.yaml`; add patch files under `patches/` and device-tree overlay
 sources (`*.dtso`) under `overlays/`, then list them in `project.yaml`.
+For another AMD/Xilinx family, also set the `silicon` device-tree settings:
+`compatible` (root compatible every DTB must carry, e.g. `xlnx,versal`),
+`dts_dir` (directory under `arch/arm64/boot/dts/` for overlays) and
+`dtb_kconfig` (Kconfig symbol registering overlay targets).
 `kernel.config` values are written to Ubuntu's annotations exactly as given, so
 quote them in YAML (`CONFIG_FOO: 'm'`, `CONFIG_LOG_BUF_SHIFT: '18'`) and keep
 Kconfig's own quotes for string options

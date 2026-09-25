@@ -15,7 +15,8 @@ SCHEMA_VERSION = 1
 # Expected shape: a dict is a nested mapping; a type is a leaf.
 SCHEMA = {
     "schema": int,
-    "silicon": {"vendor": str, "family": str, "board": str},
+    "silicon": {"vendor": str, "family": str, "board": str,
+                "compatible": str, "dts_dir": str, "dtb_kconfig": str},
     "ubuntu": {"release": str},
     "kernel": {
         "source": {"repository": str, "ref": str},
@@ -31,6 +32,8 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 TAG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+~-]*$")
 CONFIG_KEY_RE = re.compile(r"^CONFIG_[A-Z0-9_]+$")
 FLAVOUR_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+COMPATIBLE_RE = re.compile(r"^[a-z0-9][a-z0-9,._+-]*$")
+DTS_DIR_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 BRANCH_NAMES = {"master", "main", "master-next", "main-next", "HEAD"}
 
 
@@ -121,6 +124,16 @@ def validate(cfg, project_dir, base_release=None):
     if cfg["schema"] != SCHEMA_VERSION:
         errors.append(f"schema: unsupported version {cfg['schema']} (expected {SCHEMA_VERSION})")
 
+    silicon = cfg["silicon"]
+    if not COMPATIBLE_RE.match(silicon["compatible"]):
+        errors.append(f"silicon.compatible: '{silicon['compatible']}' is not a device-tree "
+                      f"compatible string (e.g. xlnx,zynqmp)")
+    if not DTS_DIR_RE.match(silicon["dts_dir"]):
+        errors.append(f"silicon.dts_dir: '{silicon['dts_dir']}' must be a single directory name "
+                      f"under arch/arm64/boot/dts/ (e.g. xilinx)")
+    if not CONFIG_KEY_RE.match(silicon["dtb_kconfig"]):
+        errors.append(f"silicon.dtb_kconfig: '{silicon['dtb_kconfig']}' must look like CONFIG_NAME")
+
     if base_release and cfg["ubuntu"]["release"] != base_release:
         errors.append(f"ubuntu.release: '{cfg['ubuntu']['release']}' does not match the "
                       f"Workshop base '{base_release}'")
@@ -195,7 +208,11 @@ def _format(value):
 
 def fingerprint(cfg, project_dir):
     h = hashlib.sha256()
-    inputs = {"kernel": cfg["kernel"], "patches": cfg["patches"], "overlays": cfg["overlays"]}
+    # Only silicon settings that change the built tree; board names do not, and
+    # compatible is enforced by validation, which every reuse check re-runs.
+    devicetree = {k: cfg["silicon"][k] for k in ("dts_dir", "dtb_kconfig")}
+    inputs = {"kernel": cfg["kernel"], "patches": cfg["patches"], "overlays": cfg["overlays"],
+              "devicetree": devicetree}
     h.update(json.dumps(inputs, sort_keys=True).encode())
     for entry in cfg["patches"] + cfg["overlays"]:
         h.update(entry.encode() + b"\0" + (Path(project_dir) / entry).read_bytes())

@@ -64,6 +64,23 @@ class KernelPrepareTests(unittest.TestCase):
                          subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD"],
                                         capture_output=True, text=True, check=True).stdout.strip())
 
+    def test_overlay_registered_with_configured_kconfig(self):
+        (self.proj / "overlays/extra.dtso").write_text("/dts-v1/;\n/plugin/;\n")
+        update_config(self.proj, lambda c: (c.update(overlays=["overlays/extra.dtso"]),
+                                            c["silicon"].update(dtb_kconfig="CONFIG_ARCH_VERSAL")))
+        r = self.sh("kb_acquire_source; kb_prepare_tree")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        makefile = (self.linux / "arch/arm64/boot/dts/xilinx/Makefile").read_text()
+        self.assertIn("dtb-$(CONFIG_ARCH_VERSAL) += extra.dtbo", makefile)
+
+    def test_missing_dts_dir_fails(self):
+        (self.proj / "overlays/extra.dtso").write_text("/dts-v1/;\n/plugin/;\n")
+        update_config(self.proj, lambda c: (c.update(overlays=["overlays/extra.dtso"]),
+                                            c["silicon"].update(dts_dir="amd")))
+        r = self.sh("kb_acquire_source; kb_prepare_tree")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("silicon.dts_dir 'amd'", r.stderr)
+
     def test_overlay_may_not_replace_an_in_tree_overlay(self):
         (self.proj / "overlays/carrier.dtso").write_text("/dts-v1/;\n/plugin/;\n")
         update_config(self.proj, lambda c: c.update(overlays=["overlays/carrier.dtso"]))

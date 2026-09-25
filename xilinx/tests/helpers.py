@@ -13,6 +13,9 @@ silicon:
   vendor: amd-xilinx
   family: zynqmp
   board: kv260
+  compatible: xlnx,zynqmp
+  dts_dir: xilinx
+  dtb_kconfig: CONFIG_ARCH_ZYNQMP
 ubuntu:
   release: {release}
 kernel:

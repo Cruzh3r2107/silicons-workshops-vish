@@ -128,6 +128,12 @@ class KernelBuildTests(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("requested device tree xilinx/missing.dtb was not built", r.stderr)
 
+    def test_dtbs_checked_against_configured_compatible(self):
+        update_config(self.proj, lambda c: c["silicon"].update(compatible="xlnx,versal"))
+        r = self.build()
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("root compatible does not include xlnx,versal", r.stderr)
+
     def test_branch_ref_rejected_before_clone(self):
         update_config(self.proj, lambda c: c["kernel"]["source"].update(ref="master-next"))
         r = self.build()

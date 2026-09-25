@@ -90,6 +90,21 @@ class ValidateTests(unittest.TestCase):
         update_config(self.proj, lambda c: c.update(patches=["patches/a*.patch"]))
         self.assertError("without spaces or glob characters")
 
+    def test_silicon_devicetree_fields_required(self):
+        for key in ("compatible", "dts_dir", "dtb_kconfig"):
+            with self.subTest(key=key):
+                update_config(self.proj, lambda c: c["silicon"].pop(key))
+                self.assertError(f"silicon.{key}: required key missing")
+                self.proj = make_project(self.tmp / key)
+
+    def test_silicon_devicetree_values_validated(self):
+        bad = {"compatible": "Xlnx Versal", "dts_dir": "../xilinx", "dtb_kconfig": "ARCH_VERSAL"}
+        for key, value in bad.items():
+            with self.subTest(key=key):
+                update_config(self.proj, lambda c: c["silicon"].update({key: value}))
+                self.assertError(f"silicon.{key}:")
+                self.proj = make_project(self.tmp / key)
+
     def test_bad_config_key(self):
         update_config(self.proj, lambda c: c["kernel"].update(config={"FOO": "y"}))
         self.assertError("must look like CONFIG_NAME")
@@ -157,6 +172,18 @@ class CliTests(unittest.TestCase):
         r = self.cli("validate")
         self.assertEqual(r.returncode, 1)
         self.assertIn("project.yaml: extra: unknown key", r.stderr)
+
+    def test_fingerprint_covers_devicetree_build_inputs_only(self):
+        # compatible only affects validation, which every reuse check re-runs.
+        base = self.cli("fingerprint").stdout
+        update_config(self.proj, lambda c: c["silicon"].update(board="kr260", compatible="xlnx,versal"))
+        self.assertEqual(self.cli("fingerprint").stdout, base)
+        for key, value in (("dts_dir", "amd"), ("dtb_kconfig", "CONFIG_ARCH_VERSAL")):
+            with self.subTest(key=key):
+                update_config(self.proj, lambda c: c["silicon"].update({key: value}))
+                changed = self.cli("fingerprint").stdout
+                self.assertNotEqual(changed, base)
+                base = changed
 
     def test_fingerprint_changes_with_patch_content(self):
         (self.proj / "patches" / "p.patch").write_text("one")

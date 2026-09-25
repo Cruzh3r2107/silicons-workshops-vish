@@ -1,18 +1,24 @@
 # shellcheck shell=sh
-# Silicon constants for this Workshop (AMD/Xilinx ZynqMP, arm64) and helpers
-# for driving an Ubuntu kernel git tree. Requires common.sh.
+# Architecture constants for this Workshop (AMD/Xilinx, arm64) and helpers for
+# driving an Ubuntu kernel git tree. Requires common.sh. Family-specific
+# device-tree settings come from project.yaml (uk_load_silicon).
 
 KARCH=arm64
 DEB_ARCH=arm64
 CROSS=aarch64-linux-gnu-
-DTS_SUBDIR=xilinx
-DTB_KCONFIG=CONFIG_ARCH_ZYNQMP
-ROOT_COMPATIBLE=xlnx,zynqmp
 KERNEL_IMAGE=Image.gz
 LOCAL_SUFFIX=+workshop1
 # ABI/module/retpoline checks compare against the archive's previous upload,
 # which local changes legitimately diverge from; tools are not delivered.
 UK_RULES_ARGS="do_skip_checks=true do_tools=false"
+
+# uk_load_silicon: set DTS_SUBDIR, DTB_KCONFIG and ROOT_COMPATIBLE from
+# project.yaml's silicon section.
+uk_load_silicon() {
+	DTS_SUBDIR=$(wscfg get silicon.dts_dir)
+	DTB_KCONFIG=$(wscfg get silicon.dtb_kconfig)
+	ROOT_COMPATIBLE=$(wscfg get silicon.compatible)
+}
 
 # uk_debian_dir: the tree's packaging directory (e.g. debian.xilinx).
 uk_debian_dir() {

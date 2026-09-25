@@ -7,6 +7,10 @@ silicon:
   vendor: amd-xilinx
   family: zynqmp
   board: kv260
+  # Device-tree settings shared by the family's boards:
+  compatible: xlnx,zynqmp          # root compatible every requested DTB must carry
+  dts_dir: xilinx                  # arch/arm64/boot/dts/<dts_dir>: where overlays are added
+  dtb_kconfig: CONFIG_ARCH_ZYNQMP  # Kconfig symbol that registers overlay targets
 
 ubuntu:
   release: noble

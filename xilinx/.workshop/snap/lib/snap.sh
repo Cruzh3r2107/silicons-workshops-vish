@@ -114,6 +114,7 @@ snap_main() {
 	# A previous run killed mid-pack may have left the local source behind.
 	snap_unpublish_archive
 	snap_check_host
+	uk_load_silicon
 	# Reuses valid debs (and kernel outputs), rebuilds stale ones.
 	kernel-build-debs
 	# Render first: it is cheap, and hashing the rendered project makes

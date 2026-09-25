@@ -7,6 +7,7 @@ kb_load_config() {
 	REPO=$(wscfg get kernel.source.repository)
 	REF=$(wscfg get kernel.source.ref)
 	FLAVOUR=$(wscfg get kernel.flavour)
+	uk_load_silicon
 }
 
 # kb_ref_spec: the only revision $REF may name: a full 40-character commit
@@ -62,6 +63,9 @@ kb_prepare_tree() {
 	done
 
 	_kb_dts="arch/$KARCH/boot/dts/$DTS_SUBDIR"
+	if [ -n "$(wscfg get overlays)" ] && [ ! -f "$_kb_dts/Makefile" ]; then
+		die "silicon.dts_dir '$DTS_SUBDIR': $_kb_dts/Makefile not found in the kernel tree"
+	fi
 	for _kb_o in $(wscfg get overlays); do
 		_kb_name=$(basename "$_kb_o" .dtso)
 		[ ! -e "$_kb_dts/$_kb_name.dtso" ] ||

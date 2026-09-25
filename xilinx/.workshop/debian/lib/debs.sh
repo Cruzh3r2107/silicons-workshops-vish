@@ -29,6 +29,7 @@ debs_main() {
 	# Reuses valid kernel outputs, rebuilds stale ones.
 	kernel-build
 	FLAVOUR=$(wscfg get kernel.flavour)
+	uk_load_silicon
 	# binary-<flavour> recompiles when the build stamp is gone, which would
 	# diverge from the validated out/kernel; rebuild the kernel instead.
 	if [ ! -e "$LINUX_DIR/debian/stamps/stamp-build-$FLAVOUR" ]; then
