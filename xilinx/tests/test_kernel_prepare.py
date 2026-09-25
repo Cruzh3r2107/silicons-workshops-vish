@@ -40,6 +40,37 @@ class KernelPrepareTests(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("is not a tag", r.stderr)
 
+    def test_short_hex_ref_is_not_resolved_as_a_commit(self):
+        # Only full 40-character SHAs are commits; anything else must be a tag.
+        short = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "--short=8", "HEAD"],
+                               capture_output=True, text=True, check=True).stdout.strip()
+        update_config(self.proj, lambda c: c["kernel"]["source"].update(ref=short))
+        r = self.sh("kb_acquire_source")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("is not a tag", r.stderr)
+
+    def test_new_tag_is_fetched_even_if_a_branch_has_its_name(self):
+        from tests.fakekernel import git
+        git(self.repo, "branch", "Ubuntu-xilinx-6.8.0-1037.38")
+        self.assertEqual(self.sh("kb_acquire_source").returncode, 0)
+        (self.repo / "NEW").write_text("x")
+        git(self.repo, "add", "NEW")
+        git(self.repo, "commit", "-q", "-m", "new release")
+        git(self.repo, "tag", "Ubuntu-xilinx-6.8.0-1037.38")
+        update_config(self.proj, lambda c: c["kernel"]["source"].update(ref="Ubuntu-xilinx-6.8.0-1037.38"))
+        r = self.sh("kb_acquire_source; kb_resolve_ref")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip().splitlines()[-1],
+                         subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD"],
+                                        capture_output=True, text=True, check=True).stdout.strip())
+
+    def test_overlay_may_not_replace_an_in_tree_overlay(self):
+        (self.proj / "overlays/carrier.dtso").write_text("/dts-v1/;\n/plugin/;\n")
+        update_config(self.proj, lambda c: c.update(overlays=["overlays/carrier.dtso"]))
+        r = self.sh("kb_acquire_source; kb_prepare_tree")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("carrier.dtso already exists in the kernel tree", r.stderr)
+
     def test_repository_change_updates_origin(self):
         self.assertEqual(self.sh("kb_acquire_source").returncode, 0)
         moved = self.tmp / "moved-linux"

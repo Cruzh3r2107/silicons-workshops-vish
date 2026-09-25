@@ -64,6 +64,19 @@ def check(deb_dir, kernel_dir, cfg, dts_subdir):
         return [f"{deb_dir}: no .deb packages"]
 
     errors, packages, contents = [], {}, {}
+    record = deb_dir / "metadata" / "packages.json"
+    try:
+        recorded = {e["file"]: e["sha256"] for e in json.loads(record.read_text())}
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        return [f"{record}: unreadable package record ({e})"]
+    present = {deb.name for deb in debs}
+    for name in sorted(set(recorded) - present):
+        errors.append(f"{name}: recorded in packages.json but missing from {deb_dir}")
+    for name in sorted(present - set(recorded)):
+        errors.append(f"{name}: not recorded in packages.json")
+    for name in sorted(present & set(recorded)):
+        if _sha256_file(deb_dir / name) != recorded[name]:
+            errors.append(f"{name}: changed since kernel-build-debs recorded it")
     image_pkg, modules_pkg = f"linux-image-{kver}", f"linux-modules-{kver}"
     vmlinuz = f"boot/vmlinuz-{kver}"
     image_data = None

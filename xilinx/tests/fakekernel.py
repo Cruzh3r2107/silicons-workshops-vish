@@ -130,6 +130,7 @@ elif target == "binary-xilinx":
     elf[0:4] = b"\x7fELF"
     elf[18:20] = (183).to_bytes(2, "little")
     deb(f"linux-modules-{k}", {f"lib/modules/{k}/kernel/test.ko": bytes(elf)})
+    deb(f"linux-headers-{k}", {f"usr/src/linux-headers-{k}/Makefile": b"# headers\n"})
 elif target == "__modules_install":
     dest = Path(sys.argv[2]) / "lib" / "modules" / sys.argv[3]
     (dest / "kernel").mkdir(parents=True, exist_ok=True)
@@ -168,6 +169,8 @@ def make_fake_kernel_repo(root):
         "debian.xilinx/config/annotations": "# Menu: fake\n",
         "arch/arm64/boot/dts/xilinx/Makefile": "dtb-$(CONFIG_ARCH_ZYNQMP) += board.dtb\n",
         "arch/arm64/boot/dts/xilinx/board.dts": BOARD_DTS,
+        # An in-tree carrier overlay, like zynqmp-sck-kv-g-revB.dtso upstream.
+        "arch/arm64/boot/dts/xilinx/carrier.dtso": "/dts-v1/;\n/plugin/;\n",
         "Makefile": TOP_MAKEFILE,
     }
     for rel, text in files.items():

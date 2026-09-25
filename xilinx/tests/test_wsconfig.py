@@ -70,6 +70,26 @@ class ValidateTests(unittest.TestCase):
                 self.assertError("quote the value")
                 update_config(self.proj, lambda c: c["kernel"].update(config={}))
 
+    def test_config_value_with_newline_or_padding_rejected(self):
+        for value in ("y\nCONFIG_B=m", " y", "m ", "a\tb"):
+            with self.subTest(value=value):
+                update_config(self.proj, lambda c: c["kernel"].update(config={"CONFIG_FOO": value}))
+                self.assertError("control characters or surrounding whitespace")
+
+    def test_config_value_null_rejected(self):
+        # The annotations tool treats "null" as "remove this entry".
+        update_config(self.proj, lambda c: c["kernel"].update(config={"CONFIG_FOO": "null"}))
+        self.assertError("'null' would remove the annotation")
+
+    def test_repository_starting_with_dash_rejected(self):
+        update_config(self.proj, lambda c: c["kernel"]["source"].update(repository="--upload-pack=x"))
+        self.assertError("kernel.source.repository: must not start with '-'")
+
+    def test_glob_characters_in_paths_rejected(self):
+        (self.proj / "patches" / "a*.patch").write_text("x")
+        update_config(self.proj, lambda c: c.update(patches=["patches/a*.patch"]))
+        self.assertError("without spaces or glob characters")
+
     def test_bad_config_key(self):
         update_config(self.proj, lambda c: c["kernel"].update(config={"FOO": "y"}))
         self.assertError("must look like CONFIG_NAME")
@@ -86,7 +106,7 @@ class ValidateTests(unittest.TestCase):
     def test_whitespace_in_path_rejected(self):
         (self.proj / "patches" / "a b.patch").write_text("x")
         update_config(self.proj, lambda c: c.update(patches=["patches/a b.patch"]))
-        self.assertError("without spaces")
+        self.assertError("without spaces or glob characters")
 
     def test_overlay_must_be_dtso(self):
         (self.proj / "overlays" / "x.dts").write_text("x")

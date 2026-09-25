@@ -9,19 +9,20 @@ kb_load_config() {
 	FLAVOUR=$(wscfg get kernel.flavour)
 }
 
-# kb_resolve_ref: print the commit for $REF. Tags are resolved only under
-# refs/tags so that branch names can never be used.
+# kb_ref_spec: the only revision $REF may name: a full 40-character commit
+# SHA, otherwise a tag. Branches and abbreviated SHAs never resolve.
+kb_ref_spec() {
+	if printf '%s\n' "$REF" | grep -Eqx '[0-9a-f]{40}'; then
+		printf '%s^{commit}\n' "$REF"
+	else
+		printf 'refs/tags/%s^{commit}\n' "$REF"
+	fi
+}
+
+# kb_resolve_ref: print the commit for $REF, or die.
 kb_resolve_ref() {
-	case "$REF" in
-	*[!0-9a-f]*)
-		git -C "$LINUX_DIR" rev-parse -q --verify "refs/tags/$REF^{commit}" ||
-			die "kernel.source.ref '$REF' is not a tag in $REPO (branches are not accepted)"
-		;;
-	*)
-		git -C "$LINUX_DIR" rev-parse -q --verify "$REF^{commit}" ||
-			die "kernel.source.ref commit $REF not found in $REPO"
-		;;
-	esac
+	git -C "$LINUX_DIR" rev-parse -q --verify "$(kb_ref_spec)" ||
+		die "kernel.source.ref '$REF' is not a tag or full commit SHA in $REPO (branches are not accepted)"
 }
 
 kb_acquire_source() {
@@ -29,10 +30,10 @@ kb_acquire_source() {
 		rm -rf "$LINUX_DIR"
 		mkdir -p "$BUILD_DIR"
 		info "cloning $REPO (full clone; Launchpad does not support shallow clones)"
-		git clone --no-checkout "$REPO" "$LINUX_DIR"
+		git clone --no-checkout -- "$REPO" "$LINUX_DIR"
 	else
 		git -C "$LINUX_DIR" remote set-url origin "$REPO"
-		if ! git -C "$LINUX_DIR" rev-parse -q --verify "$REF^{commit}" >/dev/null; then
+		if ! git -C "$LINUX_DIR" rev-parse -q --verify "$(kb_ref_spec)" >/dev/null; then
 			git -C "$LINUX_DIR" fetch --tags origin
 		fi
 	fi
@@ -63,6 +64,8 @@ kb_prepare_tree() {
 	_kb_dts="arch/$KARCH/boot/dts/$DTS_SUBDIR"
 	for _kb_o in $(wscfg get overlays); do
 		_kb_name=$(basename "$_kb_o" .dtso)
+		[ ! -e "$_kb_dts/$_kb_name.dtso" ] ||
+			die "overlay $_kb_o: $_kb_name.dtso already exists in the kernel tree ($_kb_dts); rename it"
 		cp "$PROJECT_DIR/$_kb_o" "$_kb_dts/$_kb_name.dtso"
 		printf 'dtb-$(%s) += %s.dtbo\n' "$DTB_KCONFIG" "$_kb_name" >>"$_kb_dts/Makefile"
 	done
@@ -143,7 +146,7 @@ kb_stage() {
 
 	python3 "$SDK_DIR/lib/validate_kernel.py" metadata --project "$PROJECT_DIR" \
 		--out-dir "$_kb_out" --kver "$_kb_kver" --version "$(uk_version)" \
-		--commit "$(kb_resolve_ref)" --fingerprint "$(wscfg fingerprint)"
+		--commit "$(kb_resolve_ref)" --fingerprint "$_kb_fp"
 }
 
 kb_validate() {

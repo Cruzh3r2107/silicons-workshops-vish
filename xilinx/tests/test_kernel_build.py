@@ -71,6 +71,32 @@ class KernelBuildTests(unittest.TestCase):
         self.assertEqual(self.builds(), 2)
         self.assertIn("CONFIG_FOO=m", (self.out / "config").read_text())
 
+    def test_metadata_records_the_reuse_fingerprint(self):
+        self.assertEqual(self.build().returncode, 0)
+        meta = json.loads((self.out / "metadata/build.json").read_text())
+        state = (self.proj / "build/state/kernel.fingerprint").read_text().strip()
+        self.assertEqual(meta["fingerprint"], state)
+
+    def test_patch_content_change_triggers_rebuild(self):
+        make_patch(self.repo, self.proj / "patches/0001-add.patch")
+        update_config(self.proj, lambda c: c.update(patches=["patches/0001-add.patch"]))
+        self.assertEqual(self.build().returncode, 0)
+        make_patch(self.repo, self.proj / "patches/0001-add.patch", filename="OTHER")
+        r = self.build()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.builds(), 2)
+        self.assertTrue((self.proj / "build/linux/OTHER").is_file())
+
+    def test_overlay_content_change_triggers_rebuild(self):
+        dtso = self.proj / "overlays/extra.dtso"
+        dtso.write_text("/dts-v1/;\n/plugin/;\n&{/} { extra { }; };\n")
+        update_config(self.proj, lambda c: c.update(overlays=["overlays/extra.dtso"]))
+        self.assertEqual(self.build().returncode, 0)
+        dtso.write_text("/dts-v1/;\n/plugin/;\n&{/} { changed { }; };\n")
+        r = self.build()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.builds(), 2)
+
     def test_patch_is_applied(self):
         make_patch(self.repo, self.proj / "patches/0001-add.patch")
         update_config(self.proj, lambda c: c.update(patches=["patches/0001-add.patch"]))

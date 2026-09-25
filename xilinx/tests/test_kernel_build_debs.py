@@ -28,7 +28,8 @@ class KernelBuildDebsTests(unittest.TestCase):
         for pkg in (f"linux-image-{KVER}", f"linux-modules-{KVER}"):
             self.assertTrue((self.debs / f"{pkg}_{VERSION}_arm64.deb").is_file(), pkg)
         meta = json.loads((self.debs / "metadata/packages.json").read_text())
-        self.assertEqual({m["package"] for m in meta}, {f"linux-image-{KVER}", f"linux-modules-{KVER}"})
+        self.assertEqual({m["package"] for m in meta},
+                         {f"linux-image-{KVER}", f"linux-modules-{KVER}", f"linux-headers-{KVER}"})
         self.assertEqual(self.targets().count("build-xilinx"), 1)
         self.assertEqual(self.targets().count("binary-xilinx"), 1)
         self.assertIn("kernel-build-debs complete", r.stdout)
@@ -39,6 +40,15 @@ class KernelBuildDebsTests(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("up to date", r.stdout)
         self.assertEqual(self.targets().count("binary-xilinx"), 1)
+
+    def test_deleted_optional_package_is_rebuilt(self):
+        # packages.json records every built package; out/deb must still match it.
+        self.assertEqual(run(["kernel-build-debs"], self.proj).returncode, 0)
+        (self.debs / f"linux-headers-{KVER}_{VERSION}_arm64.deb").unlink()
+        r = run(["kernel-build-debs"], self.proj)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("Debian packages are up to date", r.stdout)
+        self.assertTrue((self.debs / f"linux-headers-{KVER}_{VERSION}_arm64.deb").is_file())
 
     def test_diverged_vmlinuz_fails(self):
         r = run(["kernel-build-debs"], self.proj, {"FAKE_CORRUPT_VMLINUZ": "1"})

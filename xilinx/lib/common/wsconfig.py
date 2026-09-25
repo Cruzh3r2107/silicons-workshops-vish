@@ -90,15 +90,17 @@ def _check_shape(node, schema, prefix, errors):
 
 
 def _safe_rel(path):
+    # No whitespace or glob characters: SDK scripts iterate over these lists
+    # with unquoted word splitting.
     return (isinstance(path, str) and path and not path.startswith("/")
-            and ".." not in Path(path).parts and not re.search(r"\s", path))
+            and ".." not in Path(path).parts and not re.search(r"[\s*?\[]", path))
 
 
 def _check_files(entries, project_dir, key, suffix, errors):
     names = set()
     for entry in entries:
         if not _safe_rel(entry) or not entry.startswith(f"{key}/"):
-            errors.append(f"{key}: '{entry}' must be a relative path under {key}/ without spaces")
+            errors.append(f"{key}: '{entry}' must be a relative path under {key}/ without spaces or glob characters")
             continue
         if suffix and not entry.endswith(suffix):
             errors.append(f"{key}: '{entry}' must end in {suffix}")
@@ -126,6 +128,8 @@ def validate(cfg, project_dir, base_release=None):
     source = cfg["kernel"]["source"]
     if re.search(r"\s", source["repository"]):
         errors.append("kernel.source.repository: must not contain whitespace")
+    if source["repository"].startswith("-"):
+        errors.append("kernel.source.repository: must not start with '-'")
     ref = source["ref"]
     if ref in BRANCH_NAMES or ref.startswith(("refs/heads/", "origin/")):
         errors.append(f"kernel.source.ref: '{ref}' is a branch; use a tag or a 40-character commit SHA")
@@ -148,6 +152,12 @@ def validate(cfg, project_dir, base_release=None):
                           f"value exactly as Kconfig expects (for example '0x10' or '250')")
         elif not isinstance(value, str) or not value.strip():
             errors.append(f"kernel.config.{key}: expected y, m, n or a value")
+        elif value != value.strip() or re.search(r"[\x00-\x1f\x7f]", value):
+            errors.append(f"kernel.config.{key}: value must not contain control characters or "
+                          f"surrounding whitespace")
+        elif value == "null":
+            errors.append(f"kernel.config.{key}: 'null' would remove the annotation; use 'n' to "
+                          f"disable the option")
 
     dtbs = cfg["kernel"]["device_trees"]
     if not dtbs:
