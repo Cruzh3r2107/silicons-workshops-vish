@@ -9,6 +9,7 @@ KV260 (K26 SOM + KV carrier), following
     workshop launch
     workshop exec -- kernel-build          # out/kernel/
     workshop exec -- kernel-build-debs     # out/deb/ (runs kernel-build first if needed)
+    workshop exec -- kernel-build-snap     # out/snap/ (runs kernel-build-debs first if needed)
 
 ## Commands
 
@@ -17,11 +18,20 @@ KV260 (K26 SOM + KV carrier), following
 | `kernel-build` | Clones the pinned Ubuntu kernel, applies `patches/`, `overlays/` and `kernel.config`, builds with Ubuntu's `debian/rules`, stages and validates `out/kernel/` |
 | `kernel-clean` | Removes generated build state and `out/`; keeps the git clone and project inputs |
 | `kernel-build-debs` | Runs `debian/rules binary-xilinx` on the validated build; writes and validates `out/deb/*.deb` (version suffix `+workshop1`) |
+| `kernel-build-snap` | Publishes `out/deb/` as a pinned local apt archive and builds the Ubuntu Core 24 kernel snap with Snapcraft's `plugin: kernel` (binary-package path) and `plugin: initrd`; validates `out/snap/*.snap` |
 
 Each command validates its outputs before succeeding and, when neither
 `project.yaml` inputs nor SDK code have changed, reuses valid outputs instead
 of rebuilding. On failure the failing stage is named and its log is under
 `build/logs/`.
+
+## Host requirements
+
+- `qemu-user-static` on the host: the kernel snap's initrd is built in an
+  arm64 chroot, which needs the host's aarch64 binfmt handler with the `F`
+  flag. `kernel-build-snap` checks this by running a tiny arm64 program.
+- Network access to the Ubuntu archive, ports.ubuntu.com, cdimage.ubuntu.com
+  (initrd base) and the kernel git repository.
 
 ## Customising
 
