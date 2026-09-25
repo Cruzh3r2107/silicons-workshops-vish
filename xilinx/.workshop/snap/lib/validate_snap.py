@@ -29,7 +29,10 @@ def check(snap, kernel_dir, cfg, dts_subdir):
     kver, version = meta["kver"], meta["version"]
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp) / "snap"
-        r = subprocess.run(["unsquashfs", "-no-progress", "-d", str(root), str(snap)],
+        # Extract only what is checked; the modules tree alone is thousands of files.
+        wanted = ["meta", "kernel.img", "vmlinuz", "initrd.img", "dtbs",
+                  f"modules/{kver}/modules.dep"]
+        r = subprocess.run(["unsquashfs", "-no-progress", "-d", str(root), str(snap), *wanted],
                            capture_output=True, text=True)
         if r.returncode != 0:
             return [f"{snap.name}: cannot unpack ({r.stderr.strip()})"]

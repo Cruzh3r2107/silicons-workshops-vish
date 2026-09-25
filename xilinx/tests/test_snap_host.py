@@ -20,11 +20,17 @@ class SnapHostTests(unittest.TestCase):
         return subprocess.run(["sh", "-eu", "-c", PRELUDE + "snap_check_host"],
                               env=sdk_env(self.proj, extra), capture_output=True, text=True)
 
-    @unittest.skipUnless(shutil.which("aarch64-linux-gnu-gcc"), "needs the arm64 cross compiler")
-    def test_runnable_probe_passes(self):
-        # Needs the development host's qemu-user-static binfmt handler.
+    @unittest.skipUnless(shutil.which("aarch64-linux-gnu-gcc")
+                         and Path("/proc/sys/fs/binfmt_misc/qemu-aarch64").exists(),
+                         "needs the arm64 cross compiler and a host aarch64 binfmt handler")
+    def test_runnable_probe_passes_and_is_built_once(self):
         r = self.check()
         self.assertEqual(r.returncode, 0, r.stderr)
+        probe = self.proj / "build/snap/aarch64-probe"
+        first = probe.stat().st_mtime_ns
+        r = self.check()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(probe.stat().st_mtime_ns, first)
 
     def test_unrunnable_probe_fails_with_fix(self):
         probe = self.tmp / "probe"

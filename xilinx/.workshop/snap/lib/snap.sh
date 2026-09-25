@@ -10,12 +10,16 @@ SNAP_PROJECT="$SNAP_DIR/project"
 # snap_check_host: the initrd plugin runs arm64 binaries in a chroot. Prove
 # they execute here (host qemu-user-static binfmt with the F flag) by running
 # a tiny static aarch64 program; /proc/sys/fs/binfmt_misc is often not
-# mounted inside containers even when the host handler works.
+# mounted inside containers even when the host handler works. Limit: a qemu
+# installed inside the Workshop itself would also satisfy the probe; the
+# Workshop SDKs never install one.
 snap_check_host() {
 	_sn_probe=${AARCH64_PROBE:-}
 	if [ -z "$_sn_probe" ]; then
 		mkdir -p "$SNAP_DIR"
 		_sn_probe="$SNAP_DIR/aarch64-probe"
+	fi
+	if [ ! -x "$_sn_probe" ]; then
 		printf 'int main(void) { return 0; }\n' |
 			"${CROSS}gcc" -static -x c -o "$_sn_probe" - ||
 			die "cannot build the aarch64 probe with ${CROSS}gcc (Kernel SDK toolchain missing?)"
@@ -103,6 +107,8 @@ snap_main() {
 	command -v kernel-build-debs >/dev/null ||
 		die "kernel-build-debs not found: the Debian Packaging SDK (project-debian) must be installed in this workshop"
 	command -v snapcraft >/dev/null || die "snapcraft not found: the Snap SDK setup did not complete"
+	# Fail on an unusable silicon.board before hours of kernel and deb builds.
+	python3 "$SDK_DIR/lib/render_snap.py" --project "$PROJECT_DIR" --check-name || exit 1
 	sudo -n true 2>/dev/null ||
 		die "kernel-build-snap needs passwordless sudo in the Workshop (local apt source, snapcraft --destructive-mode)"
 	# A previous run killed mid-pack may have left the local source behind.

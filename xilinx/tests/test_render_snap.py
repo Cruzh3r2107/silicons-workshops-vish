@@ -63,6 +63,32 @@ class RenderSnapTests(unittest.TestCase):
         doc = yaml.safe_load((self.out / "kernel.yaml").read_text())
         self.assertEqual(doc, {"assets": {"dtbs": {"update": True, "content": ["dtbs/"]}}})
 
+    def test_template_error_is_a_render_error(self):
+        bad = self.tmp / "bad.yaml.in"
+        bad.write_text("name: @{nosuch}\nemail: user@@example\n")
+        with self.assertRaises(rs.RenderError) as ctx:
+            rs.render(self.proj, self.kernel, bad, self.out)
+        self.assertIn("bad.yaml.in", str(ctx.exception))
+
+    def test_snap_version_over_32_characters_rejected(self):
+        (self.kernel / "metadata/build.json").write_text(json.dumps(
+            {"kver": "6.8.0-1036-xilinx", "version": "6.8.0-1036.37+workshop1.local.build.extra"}))
+        with self.assertRaises(rs.RenderError) as ctx:
+            self.render()
+        self.assertIn("32 characters", str(ctx.exception))
+
+    def test_dtbs_are_moved_not_duplicated(self):
+        script = self.render()["parts"]["kernel"]["override-build"]
+        self.assertNotIn("cp -a", script)
+        self.assertIn('mv "$CRAFT_PART_INSTALL"/firmware/*/device-tree', script)
+
+    def test_check_name_needs_no_build_outputs(self):
+        shutil.rmtree(self.kernel)
+        rs.check_name(self.proj)
+        update_config(self.proj, lambda c: c["silicon"].update(board="KV260"))
+        with self.assertRaises(rs.RenderError):
+            rs.check_name(self.proj)
+
     def test_invalid_board_name_rejected(self):
         update_config(self.proj, lambda c: c["silicon"].update(board="KV260"))
         with self.assertRaises(rs.RenderError) as ctx:

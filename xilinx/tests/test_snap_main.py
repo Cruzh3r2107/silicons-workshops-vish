@@ -130,6 +130,13 @@ class SnapMainTests(unittest.TestCase):
         self.assertIn("up to date", r.stdout)
         self.assertEqual(len(self.snapcraft_runs()), 1)
 
+    def test_invalid_board_rejected_before_building(self):
+        update_config(self.proj, lambda c: c["silicon"].update(board="KV260"))
+        r = self.build()
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("silicon.board", r.stderr)
+        self.assertFalse((self.proj / "out/deb").exists())
+
     def test_missing_snap_rebuilds(self):
         self.assertEqual(self.build().returncode, 0)
         for snap in (self.proj / "out/snap").glob("*.snap"):

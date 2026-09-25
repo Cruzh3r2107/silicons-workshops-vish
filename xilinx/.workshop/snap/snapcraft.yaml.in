@@ -20,10 +20,9 @@ parts:
     kernel-ubuntu-abinumber: '@{abinumber}'
     override-build: |
       craftctl default
-      # The binary path leaves DTBs in the firmware tree; expose them as the
+      # The binary path leaves DTBs in the firmware tree; move them to the
       # dtbs/ kernel asset that gadgets reference as $kernel:dtbs/dtbs/...
-      mkdir -p "$CRAFT_PART_INSTALL/dtbs"
-      cp -a "$CRAFT_PART_INSTALL"/firmware/*/device-tree/. "$CRAFT_PART_INSTALL/dtbs/"
+      mv "$CRAFT_PART_INSTALL"/firmware/*/device-tree "$CRAFT_PART_INSTALL/dtbs"
       # snapd's U-Boot integration boots kernel.img; the binary path only
       # provides vmlinuz.
       ln -f "$CRAFT_PART_INSTALL/vmlinuz" "$CRAFT_PART_INSTALL/kernel.img"
