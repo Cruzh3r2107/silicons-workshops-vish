@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from tests.fakekernel import make_fake_kernel_repo, make_patch
-from tests.helpers import make_project, run, update_config
+from tests.helpers import REPO, make_project, run, update_config
 
 KVER = "6.8.0-1036-xilinx"
 
@@ -37,12 +37,31 @@ class KernelBuildTests(unittest.TestCase):
         self.assertEqual(len(meta["commit"]), 40)
         self.assertIn("kernel-build complete", r.stdout)
 
+    def test_staged_modules_are_stripped(self):
+        # Ubuntu packages ship stripped modules; staging must match.
+        self.assertEqual(self.build().returncode, 0)
+        ko = self.out / f"modules/lib/modules/{KVER}/kernel/test.ko"
+        self.assertFalse(ko.read_bytes().endswith(b"DEBUGINFO"))
+
     def test_second_run_reuses_outputs(self):
         self.assertEqual(self.build().returncode, 0)
         r = self.build()
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("up to date", r.stdout)
         self.assertEqual(self.builds(), 1)
+
+    def test_sdk_code_change_triggers_rebuild(self):
+        # Outputs built by older SDK code are not reused after an SDK update.
+        (self.proj / ".workshop").unlink()
+        shutil.copytree(REPO / ".workshop", self.proj / ".workshop")
+        cmd = [str(self.proj / ".workshop/kernel/bin/kernel-build")]
+        self.assertEqual(run(cmd, self.proj).returncode, 0)
+        with open(self.proj / ".workshop/kernel/lib/kernel.sh", "a") as f:
+            f.write("\n# sdk update\n")
+        r = run(cmd, self.proj)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("up to date", r.stdout)
+        self.assertEqual(self.builds(), 2)
 
     def test_config_change_triggers_rebuild(self):
         self.assertEqual(self.build().returncode, 0)

@@ -139,7 +139,7 @@ kb_stage() {
 	done
 
 	make -C "$LINUX_DIR" O="$_kb_bdir" ARCH="$KARCH" CROSS_COMPILE="$CROSS" \
-		KERNELRELEASE="$_kb_kver" INSTALL_MOD_PATH="$_kb_out/modules" modules_install
+		KERNELRELEASE="$_kb_kver" INSTALL_MOD_PATH="$_kb_out/modules" INSTALL_MOD_STRIP=1 modules_install
 
 	python3 "$SDK_DIR/lib/validate_kernel.py" metadata --project "$PROJECT_DIR" \
 		--out-dir "$_kb_out" --kver "$_kb_kver" --version "$(uk_version)" \
@@ -155,7 +155,10 @@ kernel_build_main() {
 	[ $# -eq 0 ] || die "usage: kernel-build (configure the build in project.yaml)"
 	wscfg validate || exit 1
 	kb_load_config
-	_kb_fp=$(wscfg fingerprint)
+	# Inputs plus the SDK code that turns them into outputs, so an SDK update
+	# never reuses outputs built by older code.
+	_kb_fp=$({ wscfg fingerprint; cat "$SDK_DIR"/bin/* "$SDK_DIR"/lib/*.sh "$SDK_DIR"/lib/*.py \
+		"$COMMON_DIR"/*.sh "$COMMON_DIR"/*.py; } | sha256sum | cut -d' ' -f1)
 	if state_matches kernel.fingerprint "$_kb_fp" && kb_validate >/dev/null 2>&1; then
 		info "kernel outputs are up to date and valid: $OUT_DIR/kernel"
 		return 0

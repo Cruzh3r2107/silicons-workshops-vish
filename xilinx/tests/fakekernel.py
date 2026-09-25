@@ -127,14 +127,16 @@ elif target == "__modules_install":
     elf[0:4] = b"\x7fELF"
     elf[4], elf[5] = 2, 1
     elf[18:20] = (183).to_bytes(2, "little")
-    (dest / "kernel" / "test.ko").write_bytes(bytes(elf))
+    # Unstripped modules keep debug info; mimic it with a trailing marker.
+    debug = b"" if len(sys.argv) > 4 and sys.argv[4] else b"DEBUGINFO"
+    (dest / "kernel" / "test.ko").write_bytes(bytes(elf) + debug)
     (dest / "modules.dep").write_text("kernel/test.ko:\n")
 else:
     sys.exit(f"fake debian/rules: unknown target {target}")
 '''
 
 TOP_MAKEFILE = ('modules_install:\n'
-                '\tpython3 debian/rules __modules_install "$(INSTALL_MOD_PATH)" "$(KERNELRELEASE)"\n')
+                '\tpython3 debian/rules __modules_install "$(INSTALL_MOD_PATH)" "$(KERNELRELEASE)" "$(INSTALL_MOD_STRIP)"\n')
 
 GIT_ENV = {"GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.com",
            "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.com"}
