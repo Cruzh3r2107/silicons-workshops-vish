@@ -94,7 +94,8 @@ def check(deb_dir, kernel_dir, cfg, dts_subdir):
             errors.append(f"{packages[image_pkg].name}: {vmlinuz} missing")
         elif _sha256_bytes(image_data) != _sha256_bytes(expected):
             errors.append(f"{packages[image_pkg].name}: {vmlinuz} differs from "
-                          f"{kernel_dir}/image/Image.gz (kernel was rebuilt or diverged)")
+                          f"{kernel_dir}/image/Image.gz (kernel was rebuilt or diverged; run kernel-clean, "
+                          "then kernel-build-debs)")
 
     all_paths = {p for names in contents.values() for p in names}
     firmware = f"lib/firmware/{kver}/device-tree"

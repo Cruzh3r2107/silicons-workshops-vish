@@ -60,6 +60,16 @@ class ValidateTests(unittest.TestCase):
             (self.proj / "project.yaml").read_text().replace("config: {}", "config: {CONFIG_FOO: yes}"))
         self.assertError("quote the value")
 
+    def test_yaml_coerced_numbers_rejected(self):
+        # PyYAML (YAML 1.1) turns 0x10 into 16, 010 into 8 and 1:30 into 90,
+        # which would silently misconfigure the kernel.
+        for raw in ("0x10", "010", "1:30"):
+            with self.subTest(raw=raw):
+                (self.proj / "project.yaml").write_text(
+                    (self.proj / "project.yaml").read_text().replace("config: {}", f"config: {{CONFIG_FOO: {raw}}}"))
+                self.assertError("quote the value")
+                update_config(self.proj, lambda c: c["kernel"].update(config={}))
+
     def test_bad_config_key(self):
         update_config(self.proj, lambda c: c["kernel"].update(config={"FOO": "y"}))
         self.assertError("must look like CONFIG_NAME")
@@ -118,7 +128,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(self.cli("get", "kernel.device_trees").stdout, "xilinx/a.dtb\nxilinx/b.dtb\n")
 
     def test_get_map_and_empty(self):
-        update_config(self.proj, lambda c: c["kernel"].update(config={"CONFIG_A": "m", "CONFIG_HZ": 250}))
+        update_config(self.proj, lambda c: c["kernel"].update(config={"CONFIG_A": "m", "CONFIG_HZ": "250"}))
         self.assertEqual(self.cli("get", "kernel.config").stdout, "CONFIG_A=m\nCONFIG_HZ=250\n")
         self.assertEqual(self.cli("get", "patches").stdout, "")
 

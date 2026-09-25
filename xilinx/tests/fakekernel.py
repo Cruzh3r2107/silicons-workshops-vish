@@ -100,6 +100,9 @@ elif target == "build-xilinx":
             key, value = line.split(None, 1)
             lines.append(f"# {key} is not set" if value == "n" else f"{key}={value}")
     (bdir / ".config").write_text("\n".join(lines) + "\n")
+    stamps = tree / "debian" / "stamps"
+    stamps.mkdir(parents=True, exist_ok=True)
+    (stamps / "stamp-build-xilinx").write_text("")
     for m in re.finditer(r"\+= (\S+)\.(dtbo?)$", (dts / "Makefile").read_text(), re.M):
         name, kind = m.groups()
         src = dts / (name + (".dts" if kind == "dtb" else ".dtso"))
@@ -108,6 +111,13 @@ elif target == "build-xilinx":
 elif target == "binary-xilinx":
     if not bdir.is_dir():
         sys.exit("binary-xilinx: kernel has not been built")
+    if not (tree / "debian" / "stamps" / "stamp-build-xilinx").exists():
+        # Like the real rules: a missing build stamp means binary-% recompiles,
+        # and the new image is not byte-identical to the staged one.
+        with (tree.parent / "fake-rules.log").open("a") as log:
+            log.write("implicit-rebuild\n")
+        image_path = bdir / "arch" / "arm64" / "boot" / "Image.gz"
+        image_path.write_bytes(image_path.read_bytes() + b"rebuilt")
     k = kver()
     image = (bdir / "arch" / "arm64" / "boot" / "Image.gz").read_bytes()
     if os.environ.get("FAKE_CORRUPT_VMLINUZ"):

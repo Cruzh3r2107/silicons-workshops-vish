@@ -141,8 +141,11 @@ def validate(cfg, project_dir, base_release=None):
         elif isinstance(value, bool):
             errors.append(f"kernel.config.{key}: YAML read this as a boolean; quote the value "
                           f"(for example 'y' or 'n')")
-        elif isinstance(value, int):
-            continue
+        elif isinstance(value, (int, float)):
+            # YAML 1.1 rewrites 0x10, 010 and 1:30 as 16, 8 and 90; accepting
+            # any number would silently change hex/octal Kconfig values.
+            errors.append(f"kernel.config.{key}: YAML read this as the number {value!r}; quote the "
+                          f"value exactly as Kconfig expects (for example '0x10' or '250')")
         elif not isinstance(value, str) or not value.strip():
             errors.append(f"kernel.config.{key}: expected y, m, n or a value")
 

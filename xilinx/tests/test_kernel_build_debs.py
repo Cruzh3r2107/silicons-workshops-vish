@@ -45,6 +45,16 @@ class KernelBuildDebsTests(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("differs from", r.stderr)
 
+    def test_missing_build_stamp_rebuilds_kernel_first(self):
+        # With the build stamp gone, binary-xilinx would recompile and diverge
+        # from out/kernel; kernel-build-debs must rebuild the kernel instead.
+        self.assertEqual(run(["kernel-build"], self.proj).returncode, 0)
+        (self.proj / "build/linux/debian/stamps/stamp-build-xilinx").unlink()
+        r = run(["kernel-build-debs"], self.proj)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.targets().count("build-xilinx"), 2)
+        self.assertNotIn("implicit-rebuild", self.targets())
+
     def test_missing_deb_dir_contents_rebuilt(self):
         self.assertEqual(run(["kernel-build-debs"], self.proj).returncode, 0)
         for deb in self.debs.glob("*.deb"):

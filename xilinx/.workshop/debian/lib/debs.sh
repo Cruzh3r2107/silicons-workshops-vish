@@ -29,6 +29,13 @@ debs_main() {
 	# Reuses valid kernel outputs, rebuilds stale ones.
 	kernel-build
 	FLAVOUR=$(wscfg get kernel.flavour)
+	# binary-<flavour> recompiles when the build stamp is gone, which would
+	# diverge from the validated out/kernel; rebuild the kernel instead.
+	if [ ! -e "$LINUX_DIR/debian/stamps/stamp-build-$FLAVOUR" ]; then
+		info "kernel build state is missing; rebuilding the kernel before packaging"
+		state_clear kernel.fingerprint
+		kernel-build
+	fi
 	# The validated kernel state plus this SDK's code (see kernel_build_main).
 	_db_fp=$({ cat "$STATE_DIR/kernel.fingerprint" "$SDK_DIR"/bin/* "$SDK_DIR"/lib/*.sh \
 		"$SDK_DIR"/lib/*.py; } | sha256sum | cut -d' ' -f1)
