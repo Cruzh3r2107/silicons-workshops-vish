@@ -1,0 +1,35 @@
+name: qcom-noble
+base: ubuntu@24.04
+summary: Qualcomm Silicon Workshop — QCS6490 (Rubik Pi 3) kernel build (Ubuntu 24.04)
+description: |
+  Reproducible build environment for the Qualcomm QCS6490 (Rubik Pi 3) EVK
+  kernel on Ubuntu 24.04 Noble.
+
+  What to build is declared in config/workshop.yaml (the customization API);
+  how it is built lives in the packaging SDKs under sdk/.
+
+  Public commands:
+    clone-kernel        Clone kernel source → kernel-src/ (run once)
+    kernel-build-debs   Debian SDK  → out/deb/    (native Ubuntu packaging)
+    kernel-build-snap   Snap SDK    → out/snap/   (deb → initrd plugin)
+
+# Two functional packaging SDKs + one build-host provisioning SDK.
+# (See DESIGN.md § Divergences: the snap is built the contract's deb→plugin:kernel
+#  way, reusing the deb-SDK output rather than recompiling from source.)
+sdks:
+  - name: project-deb-sdk
+  - name: project-snap-sdk
+  - name: project-noble-build
+
+actions:
+  clone-kernel: |
+    cd /project
+    bash sdk/common/bin/clone-kernel "$@"
+
+  kernel-build-debs: |
+    cd /project
+    bash sdk/deb/bin/kernel-build-debs "$@"
+
+  kernel-build-snap: |
+    cd /project
+    bash sdk/snap/bin/kernel-build-snap "$@"

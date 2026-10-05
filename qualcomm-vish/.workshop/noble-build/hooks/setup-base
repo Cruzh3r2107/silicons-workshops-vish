@@ -1,0 +1,112 @@
+#!/bin/bash
+# setup-base — Qualcomm Silicon Workshop build-host provisioning (Ubuntu 24.04).
+# Runs as root at launch/refresh, before the project is mounted.
+#
+# Provisions everything the deb-SDK and snap-SDK need:
+#   - arm64 foreign architecture + ports.ubuntu.com apt sources
+#   - arm64 cross-toolchain (GCC), Clang/LLVM, device-tree compiler
+#   - kernel build dependencies (verified against linux-debian 6.8.12)
+#   - Debian/Ubuntu kernel packaging tooling (incl. dwarfdump for buildinfo)
+#   - Ubuntu Core initrd assembly deps (curl, dracut-core)
+#   - qemu (system + user) + binfmt + squashfs-tools + sparse
+#   - snapcraft (latest/edge — carries the initrd plugin stable lacks)
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+log() { echo "[qcom-noble-build] $*"; }
+
+apt-get update
+
+# --- arm64 as a first-class foreign architecture --------------------------
+# Qualcomm silicon is ARM64, always. The native archive carries no arm64, so
+# pin it to the host arch and add ports.ubuntu.com for arm64. Skipped when the
+# host is already arm64 (native build).
+HOST_ARCH="$(dpkg --print-architecture)"
+if [ "$HOST_ARCH" != "arm64" ]; then
+  . /etc/os-release
+  NATIVE_SRC=/etc/apt/sources.list.d/ubuntu.sources
+  if [ -f "$NATIVE_SRC" ] && ! grep -q '^Architectures:' "$NATIVE_SRC"; then
+    log "Restricting ${NATIVE_SRC} to ${HOST_ARCH} (arm64 comes from ports)..."
+    sed -i "/^Types: deb/a Architectures: ${HOST_ARCH}" "$NATIVE_SRC"
+  fi
+  if [ ! -f /etc/apt/sources.list.d/arm64-ports.sources ]; then
+    log "Adding ports.ubuntu.com arm64 apt source..."
+    cat > /etc/apt/sources.list.d/arm64-ports.sources <<EOF
+Types: deb
+URIs: http://ports.ubuntu.com/ubuntu-ports
+Suites: ${VERSION_CODENAME} ${VERSION_CODENAME}-updates ${VERSION_CODENAME}-backports
+Components: main universe restricted multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+Architectures: arm64
+EOF
+  fi
+  dpkg --add-architecture arm64
+  apt-get update
+fi
+
+# --- arm64 cross toolchain (GCC) + Clang/LLVM + device-tree compiler -------
+apt-get install -y --no-install-recommends \
+    gcc-aarch64-linux-gnu \
+    binutils-aarch64-linux-gnu \
+    clang lld llvm \
+    device-tree-compiler
+
+# --- core kernel build dependencies (verified against linux-debian 6.8.12) --
+apt-get install -y --no-install-recommends \
+    build-essential \
+    bc bison flex \
+    libssl-dev libelf-dev \
+    dwarves \
+    kmod cpio rsync \
+    zstd lz4 \
+    libncurses-dev \
+    pkg-config \
+    python3 python3-yaml \
+    ccache \
+    git ca-certificates
+
+# --- Debian/Ubuntu kernel packaging (.deb) ---------------------------------
+# dwarfdump: native Ubuntu build (debian/rules binary) uses it for the
+# linux-buildinfo sources.list; without it stamp-build fails.
+apt-get install -y --no-install-recommends \
+    fakeroot dpkg-dev debhelper kernel-wedge dwarfdump
+
+# --- Ubuntu Core initrd assembly (snapcraft `initrd` plugin) ---------------
+apt-get install -y --no-install-recommends \
+    curl dracut-core
+
+# --- validation + foreign-arch emulation for the initrd chroot -------------
+apt-get install -y --no-install-recommends \
+    qemu-system-arm qemu-utils qemu-user-static binfmt-support \
+    openssh-client sparse squashfs-tools
+
+# --- arm64 target libraries -------------------------------------------------
+# libfakeroot:arm64 is required by the snapcraft `initrd` plugin when it
+# cross-builds the Ubuntu Core initramfs as a non-root user.
+if [ "$HOST_ARCH" != "arm64" ]; then
+  apt-get install -y --no-install-recommends libfakeroot:arm64 || \
+    log "WARNING: could not install libfakeroot:arm64 (snap initrd may need it)"
+fi
+
+# --- snapcraft (latest/edge for the initrd plugin) -------------------------
+# snapcraft is a classic snap and needs snapd + container nesting. In a fresh
+# workshop container snapd may be absent/unseeded; try, but do not fail the SDK
+# install if snapd is unavailable (the deb-SDK does not need snapcraft, and the
+# snap-SDK can be provisioned per RUNBOOK §0b).
+if ! command -v snapcraft >/dev/null 2>&1; then
+  if command -v snap >/dev/null 2>&1; then
+    log "Installing snapcraft (latest/edge)..."
+    for i in $(seq 1 12); do
+      snap install snapcraft --classic --channel=latest/edge && break
+      log "  waiting for snapd to seed (attempt ${i}/12)..."
+      sleep 10
+    done || log "WARNING: snapcraft install did not complete — see README §3b (snap build only)"
+  else
+    log "WARNING: snapd not present; snapcraft not installed. Needed only for kernel-build-snap (README §3b)."
+  fi
+else
+  log "snapcraft already installed ($(snapcraft version 2>/dev/null || echo present))"
+fi
+
+rm -rf /var/lib/apt/lists/*
+log "setup-base complete: arm64 + GCC/Clang + dtc + kernel/packaging deps + initrd/qemu + snapcraft"

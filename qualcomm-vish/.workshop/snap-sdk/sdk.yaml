@@ -1,0 +1,19 @@
+name: snap-sdk
+version: "0.1"
+summary: Qualcomm Snap Packaging SDK
+description: |
+  Snap Packaging SDK for the Qualcomm Silicon Workshop. Builds the Ubuntu Core
+  kernel snap the contract's deb → plugin:kernel way: it reuses the deb-SDK
+  Ubuntu debs (linux-image + linux-modules) and assembles an Ubuntu Core initrd
+  with snapcraft's `initrd` plugin. The recipe lives in sdk/snap/snapcraft/.
+  → out/snap/
+
+  See DESIGN.md § Divergences for the deb-reuse vs from-source build choice.
+
+  Public command:
+    kernel-build-snap — build the Ubuntu Core kernel snap → out/snap/
+license: GPL-2.0-only
+
+plugs:
+  ssh-agent:
+    interface: ssh-agent
