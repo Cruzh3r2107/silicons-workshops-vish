@@ -1,0 +1,10 @@
+#!/bin/bash
+set -euo pipefail
+apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+	apt-utils squashfs-tools python3 python3-yaml
+snap install snapcraft --classic --channel 9.x/stable
+
+# Put the SDK's public command on PATH (this Workshop release does not run
+# setup-sdk hooks).
+ln -sf "$SDK/bin/kernel-build-snap" /usr/local/bin/kernel-build-snap

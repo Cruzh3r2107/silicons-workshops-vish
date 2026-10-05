@@ -1,0 +1,32 @@
+name: @{name}
+type: kernel
+build-base: core24
+version: '@{version}'
+summary: Ubuntu Core kernel for @{board}
+description: |
+  Ubuntu @{release} @{flavour} kernel for @{board}, built by the Silicon
+  Workshop from locally built Ubuntu kernel Debian packages.
+grade: devel
+confinement: strict
+platforms:
+  arm64:
+    build-on: [amd64]
+    build-for: [arm64]
+parts:
+  kernel:
+    plugin: kernel
+    kernel-ubuntu-binary-package: true
+    kernel-ubuntu-kconfigflavour: @{flavour}
+    kernel-ubuntu-abinumber: '@{abinumber}'
+    override-build: |
+      craftctl default
+      # The binary path leaves DTBs in the firmware tree; move them to the
+      # dtbs/ kernel asset that gadgets reference as $kernel:dtbs/dtbs/...
+      mv "$CRAFT_PART_INSTALL"/firmware/*/device-tree "$CRAFT_PART_INSTALL/dtbs"
+      # snapd's U-Boot integration boots kernel.img; the binary path only
+      # provides vmlinuz.
+      ln -f "$CRAFT_PART_INSTALL/vmlinuz" "$CRAFT_PART_INSTALL/kernel.img"
+      install -Dm644 "$CRAFT_PROJECT_DIR/kernel.yaml" "$CRAFT_PART_INSTALL/meta/kernel.yaml"
+  initrd:
+    plugin: initrd
+    after: [kernel]

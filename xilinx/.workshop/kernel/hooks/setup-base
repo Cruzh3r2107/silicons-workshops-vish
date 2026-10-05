@@ -1,0 +1,31 @@
+#!/bin/bash
+# Base image preparation: arm64 cross-build support and kernel build tooling.
+set -euo pipefail
+. /etc/os-release
+host_arch=$(dpkg --print-architecture)
+
+dpkg --add-architecture arm64
+# The primary archive only serves amd64/i386; arm64 comes from ports.
+if ! grep -q '^Architectures:' /etc/apt/sources.list.d/ubuntu.sources; then
+	sed -i "/^Types:/a Architectures: $host_arch" /etc/apt/sources.list.d/ubuntu.sources
+fi
+cat >/etc/apt/sources.list.d/ubuntu-ports.sources <<PORTS
+Types: deb
+URIs: http://ports.ubuntu.com/ubuntu-ports
+Suites: $VERSION_CODENAME $VERSION_CODENAME-updates $VERSION_CODENAME-security
+Components: main restricted universe multiverse
+Architectures: arm64
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+PORTS
+
+apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+	build-essential crossbuild-essential-arm64 ca-certificates git fakeroot \
+	dpkg-dev debhelper python3 python3-yaml device-tree-compiler kmod \
+	bc bison flex rsync cpio zstd xz-utils gawk file
+
+# Put the SDK's public commands on PATH (links resolve once the SDK is mounted;
+# this Workshop release does not run setup-sdk hooks).
+for cmd in kernel-build kernel-clean; do
+	ln -sf "$SDK/bin/$cmd" "/usr/local/bin/$cmd"
+done
