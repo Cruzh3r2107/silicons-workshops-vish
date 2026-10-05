@@ -195,6 +195,7 @@ For example:
 - Qualcomm Noble: `https://code.launchpad.net/~canonical-kernel/ubuntu/+source/linux-qcom/+git/noble`
 - MediaTek Noble: `https://code.launchpad.net/~canonical-kernel/ubuntu/+source/linux-mtk/+git/noble`
 - Renesas Resolute: `https://code.launchpad.net/~canonical-kernel/ubuntu/+source/linux-renesas/+git/resolute`
+- AMD/Xilinx Noble: `https://code.launchpad.net/~canonical-kernel/ubuntu/+source/linux-xilinx/+git/noble`
 
 **To find the latest release tag:**
 
@@ -385,6 +386,7 @@ requirements. Examples found in practice:
 |--------|-------------|-------|-------|---------|
 | linux-renesas 7.0 (resolute) | resolute 26.04 | clang-21 | 1.93.1 (native) | bindgen |
 | linux-qcom 6.8 (noble) | noble 24.04 | clang-18 | 1.75 (native) | bindgen-0.65 |
+| linux-xilinx 6.8 (noble) | noble 24.04 | clang-18 | 1.75 (native) | bindgen-0.65 |
 | linux-mtk (noble) | noble 24.04 | clang-18 | 1.75 (native) | bindgen-0.65 |
 | linux-mtk (jammy) | jammy 22.04 | clang-18 | 1.75 (native) | bindgen-0.65 |
 
