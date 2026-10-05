@@ -1,7 +1,7 @@
 # AMD/Xilinx Silicon Workshop
 
 Builds and packages the Ubuntu 24.04 `linux-xilinx` kernel for AMD/Xilinx
-boards, following [`SILICON_WORKSHOP_CONTRACT.md`](SILICON_WORKSHOP_CONTRACT.md).
+boards, following `SILICON_WORKSHOP_CONTRACT.md`.
 The checked-in `project.yaml` targets the reference EVK, the AMD Kria KV260
 (K26 SOM + KV carrier); other boards are described by editing `project.yaml`.
 
